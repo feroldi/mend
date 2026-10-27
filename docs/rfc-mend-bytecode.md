@@ -91,7 +91,7 @@ main :: () {
 ```
 
 ```
-fn @main () frame s:6 h:0 content
+fn @main () frame s:6 h:0
     ldi.u64    s0, 0              ; i := range start
     ldi.u64    s2, 0
     ld.le.u32  s1, s2             ; count (no `endian` in any function: static le)
@@ -354,7 +354,6 @@ assembler and disassembler round-trip. The grammar is in §22.
 Notation: `sD`/`hD` destination, `sA`/`hA`/`sB`/… sources. `sR` is a range run
 `sR, sR+1`. "Run" operands take the width of their type's layout (§7.3). All
 integer instructions also accept `u128`/`i128`, whose operands name pairs.
-Content opcodes (§9.9–§9.11) are valid only in content functions (§17).
 
 ### 9.1 Moves and constants
 
@@ -576,7 +575,7 @@ do.
 ## 10. Calling convention
 
 **Function header** (§16.1): name, signature type `t`, frame size `s:N h:M`,
-capture counts, flags (`content`). Frame layout:
+capture counts. Frame layout:
 
 | Scalar bank                       | Handle bank                       |
 |-----------------------------------|-----------------------------------|
@@ -851,7 +850,7 @@ are `u32`; strings are `u32` length + UTF-8.
 | `f`, `d`, `w`  | format, detail and switch tables                                                 |
 | Globals        | `gs` and `gh` counts                                                             |
 | Parameters     | name, type `t`, global index, default (`k`/`kh` or none)                         |
-| Functions      | name, signature `t`, frame size, capture counts, flags, code words, span table   |
+| Functions      | name, signature `t`, frame size, capture counts, code words, span table          |
 | Spans          | `(module, byte start, byte end)`                                                 |
 | Checksum       | BLAKE3 of all preceding bytes                                                    |
 
@@ -889,10 +888,7 @@ memory-safe):
    `callc` a function type, `fmt` a format.
 6. `mkclos` capture runs match the target's header. Captures are never
    written. `callc`'s closure register is outside its argument run.
-7. Content opcodes, content intrinsics and calls to content functions occur
-   only in functions flagged `content`. `init` and constant functions are not
-   flagged.
-8. **Batch balance.** A forward dataflow assigns each `pc` a batch depth of
+7. **Batch balance.** A forward dataflow assigns each `pc` a batch depth of
    0 or 1. `bbeg` requires 0, `bend` requires 1, `ret` requires 0, and paths
    that meet at a join must agree. `raise` and `unreachable` end a path.
 
@@ -949,7 +945,7 @@ unsafety.
 ### 18.3 Constant evaluation
 
 Constants are evaluated by this interpreter. Each constant's initializer, and
-everything it calls, is lowered to a function flagged non-`content` and run
+everything it calls, is lowered to a function and run
 with a step limit of 1 000 000. The result is interned in `k` or `kh`. A
 runtime error or the step limit is a compile error (E0702) that shows the
 constant's span and the error kind. One evaluator means constants and runtime
@@ -982,7 +978,7 @@ touch the content.
 | 5. matcher descriptions                | fixed and program forms (§14)                                 |
 | 6. spans on every node                 | span tables (§15.3, §16.1)                                    |
 | 7. `batch_begin`/`batch_end` on every non-error exit | `bbeg`/`bend`; checked by the verifier (§17)    |
-| 8. content intrinsics only in `main` and content functions | `content` flag; verifier rule 7 (§17)       |
+| 8. content intrinsics only in `main` and content functions | none needed; the `loaded` check (§13.1) reports a violation as an internal error (§15.2) |
 
 ### 19.2 What this RFC provides (Mend §18.3, "The runtime provides")
 
@@ -1096,7 +1092,7 @@ per statement. The text form is unstable and may change with any `mend`
 version:
 
 ```
-fn @main () frame s:6 h:0 content
+fn @main () frame s:6 h:0
     ; blocks.mend:6  for i : 0..count as usize {
     ldi.u64    s0, 0
     ...
@@ -1113,10 +1109,9 @@ table-ref       = ( "k" | "kh" | "t" | "p" | "f" | "d" | "w" ) , digits ;
 table-value     = ? the entry, in Mend syntax where one exists: a literal, a type, a pattern literal ? ;
 
 function        = "fn" , fn-ref , signature , "frame" , "s:" , digits , "h:" , digits ,
-                  [ "caps" , "s:" , digits , "h:" , digits ] , { flag } , newline ,
+                  [ "caps" , "s:" , digits , "h:" , digits ] , newline ,
                   { line } , "end" , newline ;
 signature       = ? a Mend function type, optionally naming result runs ? ;
-flag            = "content" ;
 line            = [ label , ":" ] , [ instruction ] , [ comment ] , newline ;
 instruction     = mnemonic , [ operand , { "," , operand } ] ;
 mnemonic        = identifier , { "." , identifier } ;
@@ -1182,6 +1177,7 @@ Disambiguation:
 | Boxed 128-bit integers                          | An allocation per arithmetic operation.                                |
 | Intrinsics that call bytecode (`map` as an intrinsic) | Re-entrant interpreter; step counting inside native code. Loops keep one dispatch loop. |
 | Copying the content on `bbeg`                   | Unnecessary: queued edits leave the buffer unchanged, so it is the snapshot. |
+| A `content` flag in function headers, checked by the verifier | Redundant: the front end enforces Mend §5.3, and the `loaded` check (§13.1) catches violations. A static rule also misses `callc` targets. |
 | Explicit `scan_close`                           | Every exit path would need it; releasing the last handle does the same. |
 | Separate Typed Core evaluator for constants     | Two implementations of the same semantics that can drift apart.        |
 | Mandatory type verification                     | Doubles verification cost; structural checks already give memory safety. |
@@ -1241,7 +1237,7 @@ f0  = f"unsupported image version {u16}"
 d0  = cmp "==" (t0 h0) (t0 h1)
 d1  = cmp ">=" (u16 s1) (u16 s2)
 
-fn @main () frame s:5 h:3 content
+fn @main () frame s:5 h:3
     ; assert Image.magic == MAGIC, "not a firmware image";
     ldi.u64    s0, 0
     ldi.u64    s1, 4
@@ -1366,7 +1362,7 @@ fn @xor_with.0 (u8) -> u8 frame s:2 h:0 caps s:1 h:0
     ret        s0, -
 end
 
-fn @main () frame s:7 h:3 content
+fn @main () frame s:7 h:3
     ldi.u64    s0, 0x10           ; right-hand side: u8[0x10..].map(decode)
     len        s1
     ldv.u8     h0, s0
@@ -1413,7 +1409,7 @@ p0  = fixed (??×8) caps tag@0+4 size@4+4
 t0  = [u8]
 kh0 = "truncated chunk header"
 
-fn @find_chunk ([u8; 4]) -> Opt[Match[p0]] frame s:19 h:2 content
+fn @find_chunk ([u8; 4]) -> Opt[Match[p0]] frame s:19 h:2
     ldi.u64    s7, 12             ; mut at
 L0: len        s8
     lt.u64     s9, s7, s8

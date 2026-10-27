@@ -40,7 +40,7 @@ fn test_main_empty_function() {
     check(
         program,
         r#"
-        |fn @main () frame s:0 h:0 content
+        |fn @main () frame s:0 h:0
         |    ret
         |end
         |"#,
