@@ -14,7 +14,7 @@ The interpreter will be implemented after the compiler.
 It works as a CLI program that lets you run a Mend program, like so for example:
 
 ```bash
-mend /path/to/program.mend /path/to/input.bin PARAM1=ARG1 PARAM2=ARG2 PARAM3=ARG3
+mend /path/to/program.mend /path/to/input.bin -D PARAM1=ARG1 -D PARAM2=ARG2 -D PARAM3=ARG3
 ```
 
 ## Developing the compiler

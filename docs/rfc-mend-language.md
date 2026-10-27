@@ -1,4 +1,4 @@
-# RFC: Mend, a Language for Patching Binary Asset Files
+# RFC: Mend, a Language for Patching Binary Files
 
 | Field          | Value                                                       |
 |----------------|-------------------------------------------------------------|
@@ -12,14 +12,14 @@
 ## 1. Summary
 
 Mend is a statically typed, declarative language for patching one binary
-asset file. A Mend program runs against an **input file** named on the
+file of any format. A Mend program runs against an **input file** named on the
 command line. The file's contents, called the **content**, are available
 implicitly to `main` and the functions it calls, which read, check and edit
 them. When the program succeeds, the edited content is written to an
 **output file**.
 
 ```
-mend patch.mend assets/level.pak -o assets/level.patched.pak
+mend patch.mend data/archive.bin -o data/archive.patched.bin
 ```
 
 Features:
@@ -32,7 +32,7 @@ Features:
 - **Structs**, which name a record in the file as a group of views:
   `Header.version = 3;`.
 - **Enums**, which name integer constants of one type:
-  `Kind :: enum u16 { SOUND = 0, MESH = 4 };`, used as `Kind.MESH`.
+  `Kind :: enum u16 { DATA = 0, META = 4 };`, used as `Kind.META`.
 - **Edit statements**: `replace … with …`, `insert … at/before/after …`,
   `delete …`, and assignment through views.
 - **Locations** given as offsets, ranges (`a..+n`), or byte patterns with
@@ -47,8 +47,8 @@ Features:
   `use …::*;`.
 - **A `main :: ()` entry point**. Any function can operate on the content,
   but only while `main` runs; the top level cannot (§5.3).
-- **Parameters** supplied on the command line: `HP :: param u16 = 999;`
-  with `-D HP=500` (§9.5).
+- **Parameters** supplied on the command line: `ID :: param u16 = 1;`
+  with `-D ID=7` (§9.5).
 
 The syntax follows [sophia](https://github.com/feroldi/sophia). Mend is a JIT
 language: `mend` compiles the program, loads the input, runs, and writes the
@@ -57,15 +57,19 @@ defines the interface to it.
 
 ## 2. Motivation
 
-Game assets need repeated, mechanical binary edits: bumping version fields,
-recomputing checksums, changing values across table records, swapping
-palette entries, inserting or stripping chunks, and migrating save files.
-Ad-hoc scripts repeat file handling, byte-order unpacking and offset
-bookkeeping, and they fail late. Hex-editor edits cannot be reproduced.
+Binary files of every kind (save files, archives, media containers,
+firmware images, executables, database and network captures) need repeated,
+mechanical edits: bumping version fields, recomputing checksums, changing
+values across table records, replacing byte sequences, inserting or
+stripping chunks, and migrating files between format versions. Ad-hoc
+scripts repeat file handling, byte-order unpacking and offset bookkeeping,
+and they fail late. Hex-editor edits cannot be reproduced.
 
 Mend makes these edits short declarations over one file, checks types and
 patterns at compile time, and writes nothing unless the whole program
-succeeds. The files are data assets, not machine code, so Mend has no
+succeeds. Mend treats every input as a byte sequence and knows no file
+format; formats are described in Mend code (structs, enums, patterns,
+modules). A Mend program is trusted like a shell script, so Mend has no
 security model beyond the user's file-system access.
 
 ## 3. Goals and non-goals
@@ -84,7 +88,10 @@ security model beyond the user's file-system access.
 
 - The instruction set and its execution model (companion RFC).
 - Working on more than one file per run.
-- Machine-code patching, user generics, user-defined aggregate types, and
+- Built-in knowledge of specific formats: executable formats, instruction
+  encodings, compression and archive containers. Mend patches their bytes;
+  libraries written in Mend describe their layout.
+- User generics, user-defined aggregate types, and
   recoverable errors (§15, §21).
 
 ## 4. Overview
@@ -92,35 +99,35 @@ security model beyond the user's file-system access.
 ```mend
 endian little;
 
-MAGIC :: b"SAVE";
-MAX_HP : u32 : 9_999;
+MAGIC :: b"FWIM";
+DELAY_MS : u32 : 250;
 
-Save :: struct {
-    magic:    [u8; 4][0x00],
-    version:  u16[0x04],
-    checksum: u32[0x0C],
-    hp:       u32[if version >= 5 { 0x40 } else { 0x38 }],
+Image :: struct {
+    magic:      [u8; 4][0x00],
+    version:    u16[0x04],
+    checksum:   u32[0x0C],
+    boot_delay: u32[if version >= 5 { 0x40 } else { 0x38 }],
 }
 
-assert MAX_HP <= 9_999;                  // runs before the input is read
+assert DELAY_MS <= 9_999;                // runs before the input is read
 
 main :: () {
-    assert Save.magic == MAGIC, "not a save file";
-    assert Save.version >= 3, f"unsupported save version {Save.version}";
+    assert Image.magic == MAGIC, "not a firmware image";
+    assert Image.version >= 3, f"unsupported image version {Image.version}";
 
-    Save.hp = MAX_HP;
-    Save.checksum = crc32(u8[0x10..]);
+    Image.boot_delay = DELAY_MS;
+    Image.checksum = crc32(u8[0x10..]);
 }
 ```
 
 ```mend
-ITEM_SLOT :: p#/'ITEM' {id: ?? ??} {count: ??} 00/#;
+ENTRY :: p#/'RECD' {id: ?? ??} {flags: ??} 00/#;
 
-is_potion :: (id: u16) -> bool { id >= 0x00A0 && id < 0x00B0 }
+is_reserved :: (id: u16) -> bool { id >= 0x00A0 && id < 0x00B0 }
 
 main :: () {
-    for m : ITEM_SLOT {
-        if is_potion(u16[m.id.start]) { u8[m.count.start] = 99; }
+    for m : ENTRY {
+        if is_reserved(u16[m.id.start]) { u8[m.flags.start] = 0; }
     }
 
     replace p#/FF 00 FF/# with x"00 FF 00";
@@ -140,7 +147,7 @@ mend --emit asm <program.mend> [-I <dir>]…
 |-------------------|-------------------------------------------------------------------------|
 | `<program.mend>`  | Program to run. Required.                                               |
 | `<input>`         | File to patch. Required.                                                |
-| `-o <output>`     | Output path. Default: `{FILENAME}.out`, where `{FILENAME}` is `<input>` as given (`a/b.pak` → `a/b.pak.out`). |
+| `-o <output>`     | Output path. Default: `{FILENAME}.out`, where `{FILENAME}` is `<input>` as given (`a/b.bin` → `a/b.bin.out`). |
 | `-D <name>=<value>` | Set the parameter `name` (§9.5). May be repeated, once per name. |
 | `--dry-run`       | Run, but print a summary and a hex diff of the changes instead of writing the output. |
 | `--max-steps <n>` | Abort with `StepLimit` after `n` loop iterations plus calls. No limit by default. |
@@ -209,14 +216,14 @@ endian little;                      // ok: constant byte order
 LIMIT :: 100u32;
 assert LIMIT > 0;                   // ok: no content operation
 
-hp :: u32[0x40];                    // ok: declaring a view
-clamp_hp :: () { hp = hp.min(LIMIT); }   // content function
+timeout :: u32[0x40];               // ok: declaring a view
+cap_timeout :: () { timeout = timeout.min(LIMIT); }   // content function
 
-x := hp;                            // error: content operation at the top level
-clamp_hp();                         // error: content function called at the top level
+x := timeout;                       // error: content operation at the top level
+cap_timeout();                      // error: content function called at the top level
 
 main :: () {
-    clamp_hp();                     // ok
+    cap_timeout();                  // ok
 }
 ```
 
@@ -266,8 +273,8 @@ enums, `batch`. Bindings are statements, not expressions.
 | Float            | `1.5`, `2.0e-3`, `1.0f32`                   | inferred; defaults to `f64` |
 | Bool / char      | `true`, `'a'`, `'\u{1F600}'`                | `bool` / `char`            |
 | Byte char        | `b'a'`                                      | `u8`                       |
-| String           | `"hp = {hp}"` (no interpolation)            | `str`                      |
-| Format string    | `f"hp = {hp:#x}"`                           | `str`                      |
+| String           | `"id = {id}"` (no interpolation)            | `str`                      |
+| Format string    | `f"id = {id:#x}"`                           | `str`                      |
 | Byte string      | `b"RIFF"`                                   | `[u8; N]`                  |
 | Hex bytes        | `x"DE AD BE EF"`                            | `[u8; N]`                  |
 | Pattern          | `p#/'HDR' ?? {ver: ??}/#`                     | `Pat` (§13.2)              |
@@ -283,7 +290,7 @@ Lexical rules:
 - Only format strings `f"…"` interpolate, with `{expr}` and `{expr:spec}`. The
   spec starts at the first `:` that is not inside parentheses or brackets. In
   plain and byte strings `{` and `}` are ordinary characters, because strings
-  are often written into assets verbatim.
+  are often stored in binary files verbatim.
 - A format string is not a literal pattern in `match`.
 - A pattern literal is a separate token kind, not a string: it starts with
   `p#/` and ends at the first `/#` outside a text element (§13.2). It has no
@@ -389,14 +396,14 @@ command line. `use` declarations import other modules.
 
 ```mend
 use formats::riff;
-use formats::save as sv;
+use formats::firmware as fw;
 use util::bits::{align_up, FLAG_DEAD as DEAD};
 use util::checksums::*;
 
 main :: () {
     assert riff::Riff.form == b"WAVE";
-    sv::Header.version = 3;
-    sv::Header.checksum = crc32(u8[sv::BODY..]);
+    fw::Header.version = 3;
+    fw::Header.checksum = crc32(u8[fw::BODY..]);
 }
 ```
 
@@ -428,10 +435,10 @@ main :: () {
 **Names**
 - `use` declarations come first in a module and end with `;`.
 - A qualified name is `module::NAME`, one level deep: `module::Struct.field`,
-  `module::f(x)`, `module::Kind.MESH` and `Match[module::PAT]` are all valid.
+  `module::f(x)`, `module::Kind.META` and `Match[module::PAT]` are all valid.
 - `use` imports modules and items, never enum variants:
-  `use m::Kind.MESH;` and `use m::{Kind.MESH};` are compile errors (E0608).
-  Import the enum and write `Kind.MESH`.
+  `use m::Kind.META;` and `use m::{Kind.META};` are compile errors (E0608).
+  Import the enum and write `Kind.META`.
 - A module alias or explicit import that conflicts with a local declaration
   or another explicit import is a compile error.
 - Glob imports have lower priority than local declarations and explicit
@@ -444,12 +451,12 @@ main :: () {
 A parameter is an immutable value supplied on the command line.
 
 ```mend
-HP   :: param u16 = 999;
+ID   :: param u16 = 1;
 NAME :: param str;
 ```
 
 ```
-mend fix.mend save.dat -D HP=500 -D NAME=hero
+mend fix.mend firmware.bin -D ID=7 -D NAME=board-a
 ```
 
 - A parameter is declared as `name :: param T [= default];`, only in the
@@ -475,9 +482,9 @@ An enum names a set of integer constants that share one type.
 
 ```mend
 Kind :: enum u16 {
-    SOUND   = 0,
-    TEXTURE = 4,
-    MESH    = 0x10,
+    DATA  = 0,
+    INDEX = 4,
+    META  = 0x10,
 };
 
 kind :: u16[0x08];
@@ -486,11 +493,11 @@ main :: () {
     k := kind;
     assert Kind.contains(k), f"unknown kind {k:#x}";
     size := match k {
-        Kind.SOUND   => 16usize,
-        Kind.TEXTURE => 64,
-        _            => 128,
+        Kind.DATA  => 16usize,
+        Kind.INDEX => 64,
+        _          => 128,
     };
-    if k == Kind.SOUND { kind = Kind.MESH; }
+    if k == Kind.DATA { kind = Kind.META; }
     print(f"{Kind.name_of(k).unwrap()}: {size} bytes");
 }
 ```
@@ -509,15 +516,15 @@ Declaration:
   error.
 - An enum has at least one variant. Variant names are unique within the enum.
   Two variants with the same value are a compile error; write an alias as a
-  constant (`DEFAULT : u16 : Kind.SOUND;`).
+  constant (`DEFAULT : u16 : Kind.DATA;`).
 - `contains` and `name_of` are not valid variant names.
 
 Use:
 - `Name.VARIANT` is a constant of type `T`, valid wherever a constant is:
   constant expressions, top-level statements, array lengths (when `T` is
   `usize`) and `match` patterns (§10.4). Using it is not a content operation.
-- Operators and encoding treat a variant as a plain `T`: `u16[at] = Kind.MESH`
-  writes two bytes in the current byte order, and `insert Kind.MESH at 0`
+- Operators and encoding treat a variant as a plain `T`: `u16[at] = Kind.META`
+  writes two bytes in the current byte order, and `insert Kind.META at 0`
   inserts two bytes.
 - From another module, a variant is `module::Name.VARIANT`.
 - Variants cannot be imported on their own (§9.4). A variant is always
@@ -617,7 +624,7 @@ name := match u8[0] {
 - `if pat := e` runs the block when `e` matches `pat`.
 
 **`match`**
-- Allowed patterns: literals, enum variants (`Kind.MESH`, §9.6), literal
+- Allowed patterns: literals, enum variants (`Kind.META`, §9.6), literal
   ranges (whose bounds may be variants), `_`, an identifier binding,
   `some(p)`, `none`, and tuples. Alternatives are separated by `|`, and an
   arm may have an `if` guard.
@@ -749,7 +756,7 @@ Header :: struct {
     table:   u8[0x10..+count as usize * 8],
 }
 
-assert Header.magic == b"SAVE";
+assert Header.magic == b"FWIM";
 Header.version = 3;
 Header.flags |= 0x0001;
 ```
@@ -829,8 +836,8 @@ A pattern literal `p#/…/#` is compiled at compile time. A malformed pattern is
 a compile error. Whitespace separates elements and is otherwise ignored.
 
 ```mend
-TILE_HDR :: p#/
-    'TILE'            // magic
+SECT_HDR :: p#/
+    'SECT'            // magic
     {ver: 0?}         // version 0x00–0x0F
     [2]               // reserved
     {flags: 80/80}    // bit 7 set
@@ -1188,11 +1195,11 @@ Diagnostics use the rustc layout: an error code, a primary span, and
 
 ```
 error[E0308]: mismatched types
- --> fix.mend:8:6
+ --> fix.mend:8:11
   |
-8 | hp = hp_bonus + 1u16;
-  |      ^^^^^^^^^^^^^^^ expected `u32`, found `u16`
-  = help: `hp` is a `u32` view (line 3)
+8 | timeout = extra + 1u16;
+  |           ^^^^^^^^^^^^ expected `u32`, found `u16`
+  = help: `timeout` is a `u32` view (line 3)
 ```
 
 ```
@@ -1217,8 +1224,8 @@ error[E0603]: struct `Header` is not a value
 error[E0604]: content operation at the top level
  --> fix.mend:7:6
   |
-7 | x := hp;
-  |      ^^ `hp` is a view; reading it accesses the content
+7 | x := timeout;
+  |      ^^^^^^^ `timeout` is a view; reading it accesses the content
   = help: move this statement into `main` or a function
 ```
 
@@ -1235,27 +1242,27 @@ error[E0605]: module not found: `formats::riff`
 error[E0606]: constant refers to a parameter
  --> fix.mend:3:8
   |
-3 | MAX :: HP * 2;
-  |        ^^ `HP` is a parameter; its value is known only at run time
-  = help: use a binding (`max := HP * 2;`)
+3 | MAX :: ID * 2;
+  |        ^^ `ID` is a parameter; its value is known only at run time
+  = help: use a binding (`max := ID * 2;`)
 ```
 
 ```
 error[E0607]: enum variant without a value
  --> fix.mend:3:5
   |
-3 |     TEXTURE,
-  |     ^^^^^^^ every variant of `Kind` needs an explicit value
-  = help: write the value stored in the file, e.g. `TEXTURE = 4`
+3 |     INDEX,
+  |     ^^^^^ every variant of `Kind` needs an explicit value
+  = help: write the value stored in the file, e.g. `INDEX = 4`
 ```
 
 ```
 error[E0608]: enum variants cannot be imported
- --> fix.mend:1:13
+ --> fix.mend:1:14
   |
-1 | use formats::Kind.MESH;
-  |             ^^^^^^^^^^ `MESH` is a variant of `Kind`
-  = help: import the enum (`use formats::{Kind};`) and write `Kind.MESH`
+1 | use formats::Kind.META;
+  |              ^^^^^^^^^ `META` is a variant of `Kind`
+  = help: import the enum (`use formats::{Kind};`) and write `Kind.META`
 ```
 
 Lints:
@@ -1432,7 +1439,7 @@ Disambiguation:
   `Entry :: struct (i: usize) { id: u16[TABLE + i * 8] }`, used as
   `Entry(3).id = 5;`.
 - **Field constraints** checked as implicit assertions:
-  `magic: [u8; 4][0] == b"SAVE"`.
+  `magic: [u8; 4][0] == b"FWIM"`.
 - **Relative layout**, where a struct gets a base offset and fields follow one
   another without explicit offsets.
 - **Marks:** a `Mark` type that follows edits by the rules of §14.4.
@@ -1449,7 +1456,7 @@ Disambiguation:
 | Explicit `open`/`save` and file handles       | One file per run is the use case. Handles add a capability system and I/O failure modes for no gain. |
 | Structs as value types with instances        | A record in the file is a location, not a value. Instances would need copy and aliasing rules, plus a way to write them back. Fields as views give read and write access directly. |
 | Content operations in top-level statements    | Mixes configuration with operations, and makes the input load order observable. With `main`, top-level checks can fail before the input is read. |
-| Restricting content operations to the lexical body of `main` | Forces helpers such as `tile(i)` to be inlined. Allowing them in every function and rejecting them only at the top level keeps helpers while still confining execution to `main`. |
+| Restricting content operations to the lexical body of `main` | Forces helpers such as `block(i)` to be inlined. Allowing them in every function and rejecting them only at the top level keeps helpers while still confining execution to `main`. |
 | `f.read[u32](at)` method calls                | Noisy in a language whose subject is always the content.     |
 | `T @ at` access operator                      | Has precedence traps (`u32 @ a + 4`). Brackets delimit the offset. |
 | Endianness in the type (`u32be`)              | Byte order belongs to encoding, not arithmetic, and must be selectable at runtime. |
@@ -1463,15 +1470,15 @@ Disambiguation:
 | Relative paths (`self::`, `super::`)          | One resolution rule, from the root directory and `-I`, means a path means the same thing in every module. |
 | Unbounded quantifiers in patterns             | Unpredictable cost on binary data. Bounded gaps suffice.     |
 | `-D` overriding any typed constant            | Makes every constant part of the CLI, and makes the compiled form depend on the arguments. |
-| Interpolation in every string literal         | Strings are written into assets; braces in data would need escaping. |
+| Interpolation in every string literal         | Strings are written into binary data verbatim; braces in data would need escaping. |
 | `usize` as a distinct type from `u64`         | Both are 64-bit, so the distinction only adds casts that cannot fail. |
 | `u64` only, no `usize`                        | `usize` documents that a value is an offset or a length.     |
 | `?T` sigil for optional types                 | Reads as part of `??` and pattern wildcards (`??`, `?F`). `Opt[T]` uses the same `[ ]` type-argument form as `Range[T]` and `Match[P]`. |
 | `Result[T, E]` with `?` propagation           | Pushes signatures toward fallibility. `Opt[T]` forms cover expected failures, and a partial patch is never wanted. |
 | `try`/`catch` by error kind                   | Needs unwinding semantics, including out of `batch`, for no practical gain. |
 | Enums as distinct types (`Kind[at]`, casts to and from `T`) | Values in the content are raw integers. A distinct type adds a conversion and a validity rule to every access; `Name.contains` covers validation. |
-| `::` for enum variants (`Kind::MESH`)          | Collides with declarations (`ident ::`) at the start of a statement, and makes module paths two levels deep. `.` matches struct fields. |
-| Importing variants (`use m::Kind.MESH;`)      | A variant written without its enum's name reads as a plain constant and can collide with other names. |
+| `::` for enum variants (`Kind::META`)          | Collides with declarations (`ident ::`) at the start of a statement, and makes module paths two levels deep. `.` matches struct fields. |
+| Importing variants (`use m::Kind.META;`)      | A variant written without its enum's name reads as a plain constant and can collide with other names. |
 | Implicit variant values (`enum u16 { A, B }`) | The value is part of the file format. Implicit numbering hides it and changes it when variants are reordered. |
 | Duplicate variant values                      | Makes `name_of` and `match` arms ambiguous. An alias is a plain constant. |
 | Captures as offsets (`u16[m.id]` for `u16[m.id.start]`) | `T[r]` already decodes `[T]` over a range. The shorthand would make the result type depend on the capture's runtime length. |
@@ -1600,19 +1607,19 @@ main :: () {
 ```mend
 endian little;
 
-tile_count :: u32[0];
-tile :: (i: usize) -> u32 { u32[4 + i * 4] }
+block_count :: u32[0];
+block :: (i: usize) -> u32 { u32[4 + i * 4] }
 
 main :: () {
-    n := tile_count as usize;
-    mut solid := 0usize;
+    n := block_count as usize;
+    mut used := 0usize;
 
     for i : 0..n {
-        t := tile(i);
-        solid += t.bit(31) as usize;
-        if t.bits(0..4) == 0xF { u32[4 + i * 4] = t.with_bits(0..4, 0x1); }
+        b := block(i);
+        used += b.bit(31) as usize;
+        if b.bits(0..4) == 0xF { u32[4 + i * 4] = b.with_bits(0..4, 0x1); }
     }
 
-    print(f"{solid}/{n} solid tiles");
+    print(f"{used}/{n} blocks in use");
 }
 ```

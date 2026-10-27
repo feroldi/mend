@@ -3,7 +3,7 @@
 You are an expert in compiler engineering and architecture.
 
 `docs/` holds the draft RFCs for **Mend**, a statically typed DSL for
-patching binary game-asset files:
+patching binary files of any format:
 
 | File                          | Defines                                                  |
 |-------------------------------|----------------------------------------------------------|
@@ -51,9 +51,11 @@ implementation stay consistent with them.
   belongs in another RFC (for example the JIT instruction set), don't design
   it. Do write a *contract* section that says what this RFC hands to the
   other one and what it expects back.
-- **The author's domain:** binary assets for a game the author is making.
-  These are data files, not machine code, so there is no security model,
-  sandbox, or executable-format knowledge to cover. Say so once, in
+- **The author's domain:** binary files of any format (data, media,
+  archives, firmware, executables). Mend treats every input as bytes and has
+  no built-in format knowledge (no executable-format or instruction-encoding
+  support); formats are described in Mend code. A program is trusted like a
+  shell script, so there is no security model or sandbox. Say so once, in
   Motivation or Non-goals.
 - Output is a Markdown file in `docs/`, written locally. Don't publish
   it as an artifact or a doc unless asked.

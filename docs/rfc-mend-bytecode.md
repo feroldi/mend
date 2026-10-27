@@ -43,7 +43,7 @@ Mend means compile-on-run; no native code is generated (§6.2).
 The Mend front end produces a monomorphic, fully typed Typed Core
 (Mend §18.3). Executing it needs a target that:
 
-- keeps the per-operation cost low in loops over large assets, without the
+- keeps the per-operation cost low in loops over large files, without the
   per-node dispatch and dynamic value layout of a tree-walking interpreter;
 - implements the content model (snapshots, edit queues, markers) once, in the
   runtime, behind a small set of opcodes;
@@ -1045,22 +1045,22 @@ error[E0702]: constant evaluation failed: Overflow
 
 ```
 error: OutOfBounds: read of 4 bytes at 0x1000; content length is 0xff8
-  --> tiles.mend:3:29
+  --> blocks.mend:3:30
    |
- 3 | tile :: (i: usize) -> u32 { u32[4 + i * 4] }
-   |                             ^^^^^^^^^^^^^^ `u32` at 0x1000
+ 3 | block :: (i: usize) -> u32 { u32[4 + i * 4] }
+   |                              ^^^^^^^^^^^^^^ `u32` at 0x1000
    = note: call stack:
-           0: tile   tiles.mend:3:29
-           1: main   tiles.mend:10:14
+           0: block  blocks.mend:3:30
+           1: main   blocks.mend:10:14
    = note: no output written
 ```
 
 ```
-error: Assertion: unsupported save version 2
- --> save.mend:15:12
+error: Assertion: unsupported image version 2
+ --> fw.mend:15:12
    |
-15 |     assert Save.version >= 3, f"unsupported save version {Save.version}";
-   |            ^^^^^^^^^^^^^^^^^ left: 2u16, right: 3u16
+15 |     assert Image.version >= 3, f"unsupported image version {Image.version}";
+   |            ^^^^^^^^^^^^^^^^^^ left: 2u16, right: 3u16
 ```
 
 ```
@@ -1097,7 +1097,7 @@ version:
 
 ```
 fn @main () frame s:6 h:0 content
-    ; tiles.mend:6  for i : 0..count as usize {
+    ; blocks.mend:6  for i : 0..count as usize {
     ldi.u64    s0, 0
     ...
 ```
@@ -1214,35 +1214,35 @@ Frames and tables are shown in full; source lines are comments.
 
 ```mend
 endian little;
-MAGIC :: b"SAVE";
-MAX_HP : u32 : 9_999;
-Save :: struct {
-    magic:    [u8; 4][0x00],
-    version:  u16[0x04],
-    checksum: u32[0x0C],
-    hp:       u32[if version >= 5 { 0x40 } else { 0x38 }],
+MAGIC :: b"FWIM";
+DELAY_MS : u32 : 250;
+Image :: struct {
+    magic:      [u8; 4][0x00],
+    version:    u16[0x04],
+    checksum:   u32[0x0C],
+    boot_delay: u32[if version >= 5 { 0x40 } else { 0x38 }],
 }
 main :: () {
-    assert Save.magic == MAGIC, "not a save file";
-    assert Save.version >= 3, f"unsupported save version {Save.version}";
-    Save.hp = MAX_HP;
-    Save.checksum = crc32(u8[0x10..]);
+    assert Image.magic == MAGIC, "not a firmware image";
+    assert Image.version >= 3, f"unsupported image version {Image.version}";
+    Image.boot_delay = DELAY_MS;
+    Image.checksum = crc32(u8[0x10..]);
 }
 ```
 
 No function contains `endian`, so every access is statically `.le`. The
-top-level `assert MAX_HP <= 9_999` folds away.
+top-level `assert DELAY_MS <= 9_999` folds away.
 
 ```
-kh0 = b"SAVE"
-kh1 = "not a save file"
+kh0 = b"FWIM"
+kh1 = "not a firmware image"
 t0  = [u8; 4]
-f0  = f"unsupported save version {u16}"
+f0  = f"unsupported image version {u16}"
 d0  = cmp "==" (t0 h0) (t0 h1)
 d1  = cmp ">=" (u16 s1) (u16 s2)
 
 fn @main () frame s:5 h:3 content
-    ; assert Save.magic == MAGIC, "not a save file";
+    ; assert Image.magic == MAGIC, "not a firmware image";
     ldi.u64    s0, 0
     ldi.u64    s1, 4
     ldv.u8     h0, s0             ; [u8; 4] at 0..4
@@ -1251,7 +1251,7 @@ fn @main () frame s:5 h:3 content
     brt        s2, L1
     hldk       h2, kh1
     raise      Assertion, h2, d0
-L1: ; assert Save.version >= 3, f"…";
+L1: ; assert Image.version >= 3, f"…";
     ldi.u64    s0, 4
     ld.le.u16  s1, s0
     ldi.u16    s2, 3
@@ -1260,10 +1260,10 @@ L1: ; assert Save.version >= 3, f"…";
     ld.le.u16  s4, s0             ; the message is evaluated only on failure
     fmt        h2, s4, -, f0
     raise      Assertion, h2, d1
-L2: ; Save.hp = MAX_HP;   right-hand side, then the place
-    ldi.u32    s0, 9999
+L2: ; Image.boot_delay = DELAY_MS;   right-hand side, then the place
+    ldi.u32    s0, 250
     ldi.u64    s1, 4
-    ld.le.u16  s2, s1             ; version, for hp's offset
+    ld.le.u16  s2, s1             ; version, for boot_delay's offset
     ldi.u16    s3, 5
     ge.u16     s3, s2, s3
     brf        s3, L3
@@ -1271,7 +1271,7 @@ L2: ; Save.hp = MAX_HP;   right-hand side, then the place
     jmp        L4
 L3: ldi.u64    s4, 0x38
 L4: st.le.u32  s4, s0
-    ; Save.checksum = crc32(u8[0x10..]);
+    ; Image.checksum = crc32(u8[0x10..]);
     ldi.u64    s0, 0x10
     len        s1                 ; open range end
     ldv.u8     h0, s0
