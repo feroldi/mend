@@ -14,7 +14,7 @@ The interpreter will be implemented after the compiler.
 It works as a CLI program that lets you run a Mend program, like so for example:
 
 ```bash
-mend path/to/program.mend PARAM1=ARG1 PARAM2=ARG2 PARAM3=ARG3
+mend /path/to/program.mend /path/to/input.bin PARAM1=ARG1 PARAM2=ARG2 PARAM3=ARG3
 ```
 
 ## Developing the compiler
@@ -40,7 +40,7 @@ fn test_main_empty_function() {
     check(
         program,
         r#"
-        |fn @main () frame s:6 h:0 content
+        |fn @main () frame s:0 h:0 content
         |    ret
         |end
         |"#,
