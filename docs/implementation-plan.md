@@ -1,0 +1,133 @@
+# Implementation plan
+
+There are 3 RFCs at `docs/`:
+
+- `rfc-mend-language.md`: The design of the domain specific language called Mend.
+- `rfc-mend-bytecode.md`: The instruction set architecture design Mend compiles down to.
+- `rfc-interpreter.md`: The CLI program that drives the Mend compiler and runs the Mend bytecode.
+
+The compiler is the first to be implemented.
+It should be a library that exposes Mend's AST, and a function to compile a string or a file into the Mend bytecode.
+Both `rfc-mend-language.md` and `rfc-mend-bytecode.md` will guide the implementation of the compiler.
+
+The interpreter will be implemented after the compiler.
+It works as a CLI program that lets you run a Mend program, like so for example:
+
+```bash
+mend path/to/program.mend PARAM1=ARG1 PARAM2=ARG2 PARAM3=ARG3
+```
+
+## Developing the compiler
+
+The implementation of the compiler should go step by step, adding a language functionality, and having a set of tests for it.
+A functionality encompasses the hole pipeline: from the scanner to the code generation.
+
+A functionality implementation should have only enough code to make it pass the tests.
+
+Here's how a single unit test looks like, for example:
+
+```rust
+use crate::tests::{check, compile};
+
+#[test]
+fn test_main_empty_function() {
+    let program = compile(
+        r#"
+        |main :: () {}
+        |"#,
+    );
+
+    check(
+        program,
+        r#"
+        |fn @main () frame s:6 h:0 content
+        |    ret
+        |end
+        |"#,
+    );
+}
+```
+
+The tests should be organized in the following way:
+
+- `main.rs` declares a `#[cfg(test)] mod tests;`.
+- The `tests/` directory holds a `mod.rs` file with helper functions.
+- The `tests/` directory holds a `.rs` test module file per functinality (e.g., `test_functions.rs`, `test_content_indexing.rs` etc).
+- Each test module file should contain many unit tests like the one shown above.
+
+The `compile` helper function takes in a string formatted in a way that eases the writing of Mend programs by having the `|` character define the delimitation of the start of a line.
+It returns a Mend bytecode program unit.
+
+The `check` helper function takes in a Mend bytecode program unit and formats it to a display string that also uses the `|` character do delimit line starts, and also takes in a second argument that is a string in the same format.
+It then asserts that the two strings are equal.
+
+Here's an implementation of those helper functions:
+
+```rust
+fn compile(source_code: &str) -> String {
+    driver::compile(&strip_margin(source_code))
+}
+
+fn check<S: AsRef<str>>(program: S, expected_program: &str) {
+    use pretty_assertions::assert_eq;
+
+    assert_eq!(
+        program.as_ref().trim(),
+        remove_assembly_comments(strip_margin(expected_program)).trim()
+    );
+}
+
+fn strip_margin(text: &str) -> String {
+    text.split('\n')
+        .map(|line| {
+            let mut stripped_line = line.chars().skip_while(|&c| c != '|');
+            stripped_line.next();
+
+            stripped_line.collect::<String>()
+        })
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn remove_assembly_comments(text: String) -> String {
+    text.split('\n')
+        .map(|line| {
+            line.chars()
+                .take_while(|&c| c != ';')
+                .collect::<String>()
+                .trim_end()
+                .to_owned()
+        })
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+```
+
+The overall architecture of the code should follow that of the `sophia` compiler.
+The scanner, parser, and AST should have the same architecture found in `sophia`.
+The code generation can follow the same architecture as found in `sophia`, but there can have some breathing room for differences IF NECESSARY.
+
+## The development loop
+
+After having the project in place (i.e., the tests module and helper functions are written), we'll start the compiler library implementation.
+
+Pick a Mend language functionality, and do the following on a repeat, until it is completed:
+
+1. Suggest a functionality to be implemented.
+2. If positive, create a test module file for that functionality.
+3. Write a unit test.
+4. Check that the unit test fails by running `cargo test`.
+5. Write JUST ENOUGH code so that this unit test passes.
+6. Check the unit test passes by running `cargo test`.
+7. Ask the programmer to review the new code, as they might want to tweak it.
+8. If the functionality is completed, then we're done, otherwise go back to step 3.
+
+## There's no plan on how to implement the bytecode virtual machine for now.
+
+This will be planned later.
+
+## There's no plan on how to implement the Mend CLI tool.
+
+This will be planned later.

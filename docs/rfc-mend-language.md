@@ -14,9 +14,9 @@
 Mend is a statically typed, declarative language for patching one binary
 asset file. A Mend program runs against an **input file** named on the
 command line. The file's contents, called the **content**, are available
-implicitly inside `main`, where the program reads, checks and edits them.
-When the program succeeds, the edited content is written to an **output
-file**.
+implicitly to `main` and the functions it calls, which read, check and edit
+them. When the program succeeds, the edited content is written to an
+**output file**.
 
 ```
 mend patch.mend assets/level.pak -o assets/level.patched.pak
@@ -45,8 +45,8 @@ Features:
   bindings that can be reassigned.
 - **Modules**: `use path::to::file [as name];`, `use …::{A, B};` and
   `use …::*;`.
-- **A `main :: ()` entry point**, which is the only place where operations
-  on the content run (§5.3).
+- **A `main :: ()` entry point**. Any function can operate on the content,
+  but only while `main` runs; the top level cannot (§5.3).
 - **Parameters** supplied on the command line: `HP :: param u16 = 999;`
   with `-D HP=500` (§9.5).
 
@@ -85,7 +85,7 @@ security model beyond the user's file-system access.
 - The instruction set and its execution model (companion RFC).
 - Working on more than one file per run.
 - Machine-code patching, user generics, user-defined aggregate types, and
-  recoverable errors (§15, §23).
+  recoverable errors (§15, §21).
 
 ## 4. Overview
 
@@ -189,16 +189,17 @@ edit statements, `batch`, `endian` with a non-constant operand, and the
 content functions (§16).
 
 - Declaring a view or a struct is not a content operation. Using one is.
-- A content operation is valid only in the body of `main`, or in the body of
-  a **content function**.
-- A function or lambda is a content function if its body contains a content
-  operation, or calls or names a content function. The compiler infers this
-  over the call graph.
-- A content function can be called, or used as a value, only inside `main`
-  or another content function.
+- A content operation is valid in the body of any function or lambda,
+  `main` included.
+- A content operation is invalid at the top level: in top-level statements,
+  constants, parameter defaults and enum values.
+- A function or lambda is a **content function** if its body contains a
+  content operation, or calls or names a content function. The compiler
+  infers this over the call graph.
+- The top level cannot call or name a content function.
 
-As a result, every content operation runs while `main` runs. Top-level
-statements and constants can never touch the content.
+As a result, every content operation runs while `main` runs, after the input
+is loaded. The top level can never touch the content.
 
 Statement snippets in §9–§17 are assumed to be inside `main`, unless they
 are declarations.
@@ -211,8 +212,8 @@ assert LIMIT > 0;                   // ok: no content operation
 hp :: u32[0x40];                    // ok: declaring a view
 clamp_hp :: () { hp = hp.min(LIMIT); }   // content function
 
-x := hp;                            // error: content operation outside `main`
-clamp_hp();                         // error: content function called outside `main`
+x := hp;                            // error: content operation at the top level
+clamp_hp();                         // error: content function called at the top level
 
 main :: () {
     clamp_hp();                     // ok
@@ -680,7 +681,8 @@ xor_with :: (key: u8) -> (u8) -> u8 { (b: u8) -> u8 { b ^ key } }
 **Captures and the content**
 - Lambdas capture outer bindings **by value**, at the moment the lambda is
   created. Captures are immutable inside the lambda.
-- All functions and lambdas can read and edit the content.
+- All functions and lambdas can read and edit the content. Only the top
+  level cannot (§5.3).
 
 ## 12. Content access
 
@@ -1162,7 +1164,8 @@ The front end guarantees:
 6. Every node carries a source span.
 7. `batch` lowers to `batch_begin` / `batch_end`, with `batch_end` on every
    non-error exit.
-8. Content intrinsics appear only in `main` and in content functions. `init`
+8. Content intrinsics appear only in content functions (§5.3), which
+   include `main` when it touches the content. `init`
    code never needs the content buffer.
 
 The runtime provides:
@@ -1211,12 +1214,12 @@ error[E0603]: struct `Header` is not a value
 ```
 
 ```
-error[E0604]: content operation outside `main`
+error[E0604]: content operation at the top level
  --> fix.mend:7:6
   |
 7 | x := hp;
   |      ^^ `hp` is a view; reading it accesses the content
-  = help: move this statement into `main`
+  = help: move this statement into `main` or a function
 ```
 
 ```
@@ -1423,14 +1426,30 @@ Disambiguation:
    bare identifier is a binding. `name.ident` naming anything other than a
    variant is a compile error.
 
-## 21. Alternatives considered
+## 21. Future possibilities
+
+- **Parameterized structs** for tables of records:
+  `Entry :: struct (i: usize) { id: u16[TABLE + i * 8] }`, used as
+  `Entry(3).id = 5;`.
+- **Field constraints** checked as implicit assertions:
+  `magic: [u8; 4][0] == b"SAVE"`.
+- **Relative layout**, where a struct gets a base offset and fields follow one
+  another without explicit offsets.
+- **Marks:** a `Mark` type that follows edits by the rules of §14.4.
+- **Enum-typed access:** `Kind[at]` decodes a `T` and raises `InvalidValue`
+  when it is not a variant's value.
+- **Undo output:** emit the inverse edit list alongside the output.
+- **Greedy gaps:** `[a..b]!` tries the longest length first. `!` is unused
+  in patterns, so adding it is backward compatible.
+
+## 22. Alternatives considered
 
 | Alternative                                   | Reason for rejection                                         |
 |-----------------------------------------------|--------------------------------------------------------------|
 | Explicit `open`/`save` and file handles       | One file per run is the use case. Handles add a capability system and I/O failure modes for no gain. |
 | Structs as value types with instances        | A record in the file is a location, not a value. Instances would need copy and aliasing rules, plus a way to write them back. Fields as views give read and write access directly. |
 | Content operations in top-level statements    | Mixes configuration with operations, and makes the input load order observable. With `main`, top-level checks can fail before the input is read. |
-| Restricting content operations to the lexical body of `main` | Forces helpers such as `tile(i)` to be inlined. Inferring content functions keeps helpers while still confining execution to `main`. |
+| Restricting content operations to the lexical body of `main` | Forces helpers such as `tile(i)` to be inlined. Allowing them in every function and rejecting them only at the top level keeps helpers while still confining execution to `main`. |
 | `f.read[u32](at)` method calls                | Noisy in a language whose subject is always the content.     |
 | `T @ at` access operator                      | Has precedence traps (`u32 @ a + 4`). Brackets delimit the offset. |
 | Endianness in the type (`u32be`)              | Byte order belongs to encoding, not arithmetic, and must be selectable at runtime. |
@@ -1457,9 +1476,23 @@ Disambiguation:
 | Duplicate variant values                      | Makes `name_of` and `match` arms ambiguous. An alias is a plain constant. |
 | Captures as offsets (`u16[m.id]` for `u16[m.id.start]`) | `T[r]` already decodes `[T]` over a range. The shorthand would make the result type depend on the capture's runtime length. |
 
-## 22. Unresolved questions
+## 23. Unresolved questions
 
-None. Questions resolved on 2026-10-16:
+Lexical questions found while implementing the scanner. "Scanner" states
+what the implementation currently does.
+
+| Question | Tradeoff | Scanner | See |
+|----------|----------|---------|-----|
+| Q7. Where a format spec starts | §7 starts the spec at the first `:` outside parentheses and brackets, so `f"{riff::NAME}"` splits at `::`. Excluding `::` and `:=` and tracking braces keeps qualified names and blocks usable, at the cost of a longer rule. | `::` and `:=` do not start a spec; braces are tracked | §7 |
+| Q8. Floats without a `.` | Accepting `1e10` and `3f64` follows Rust. Requiring a `.` makes every float visibly a float. | accepted | §7 |
+| Q9. `\xHH` above `0x7F` in `str` and `char` | Allowing it as a code point (U+0080–U+00FF) is convenient. Rejecting it, as Rust does, avoids reading `\xFF` as a byte that would make the string invalid UTF-8. | rejected | §7 |
+| Q10. Non-ASCII characters in `b"…"` and `b'…'` | Encoding them as UTF-8 allows `b"é"`. Rejecting them, as Rust does, keeps byte literals one byte per character; `x"C3 A9"` covers the rest. | rejected | §7 |
+| Q11. Hex-bytes grouping | Requiring whitespace between bytes catches odd-length typos earlier. Allowing whitespace only between two-digit bytes also accepts `x"DEADBEEF"`. | two adjacent digits per byte; whitespace optional between bytes | §7 |
+| Q12. Bare `}` in format-string text | An error keeps `{`/`}` symmetric with the `\{ \}` escapes. Treating it as literal text is more permissive but asymmetric. | error | §7 |
+| Q13. `t.0.1` | Without a rule, `0.1` scans as a float. Scanning a number directly after `.` as an integer matches `"." , integer-literal` in §20 without parser token splitting. | integer after `.` | §20 |
+| Q14. Codes for lexical errors | §19 assigns no codes to lexical errors. A dedicated range (for example E01xx) is needed before scanner errors appear in diagnostics. | no codes | §19 |
+
+Questions resolved on 2026-10-16:
 
 | Question                                   | Decision                                           | See        |
 |--------------------------------------------|----------------------------------------------------|------------|
@@ -1467,25 +1500,8 @@ None. Questions resolved on 2026-10-16:
 | Q2. Interpolation only in `f"…"`            | Yes                                                | §7         |
 | Q3. `usize` versus `u64`                    | `usize`/`isize` are aliases of `u64`/`i64`         | §8, §9.3   |
 | Q4. Recoverable errors                      | None; `Opt[T]` forms only                              | §15        |
-| Q5. Greedy gap marker `[2..8]!`             | Deferred                                           | §23        |
-| Q6. Captures as offsets                     | No                                                 | §21        |
-
-
-## 23. Future possibilities
-
-- **Parameterized structs** for tables of records:
-  `Entry :: struct (i: usize) { id: u16[TABLE + i * 8] }`, used as
-  `Entry(3).id = 5;`.
-- **Field constraints** checked as implicit assertions:
-  `magic: [u8; 4][0] == b"SAVE"`.
-- **Relative layout**, where a struct gets a base offset and fields follow one
-  another without explicit offsets.
-- **Marks:** a `Mark` type that follows edits by the rules of §14.4.
-- **Enum-typed access:** `Kind[at]` decodes a `T` and raises `InvalidValue`
-  when it is not a variant's value.
-- **Undo output:** emit the inverse edit list alongside the output.
-- **Greedy gaps:** `[a..b]!` tries the longest length first. `!` is unused
-  in patterns, so adding it is backward compatible.
+| Q5. Greedy gap marker `[2..8]!`             | Deferred                                           | §21        |
+| Q6. Captures as offsets                     | No                                                 | §22        |
 
 ## Appendix A. Examples
 

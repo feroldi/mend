@@ -1,10 +1,20 @@
-# CLAUDE.md: writing RFCs in `docs/wip`
+# CLAUDE.md
 
-This directory holds draft RFCs for the binpatcher project. The current one is
-`rfc-mend-language.md`, which defines **Mend**, a statically typed DSL for
-patching binary game-asset files. This file collects what was learned while
-writing it, so later RFCs (starting with the Mend instruction-set RFC) stay
-consistent with it.
+You are an expert in compiler engineering and architecture.
+
+`docs/` holds the draft RFCs for **Mend**, a statically typed DSL for
+patching binary game-asset files:
+
+| File                          | Defines                                                  |
+|-------------------------------|----------------------------------------------------------|
+| `docs/rfc-mend-language.md`   | the language (cited as *Mend §N*)                         |
+| `docs/rfc-mend-bytecode.md`   | Mend Bytecode (MBC), the instruction set (companion RFC) |
+| `docs/rfc-interpreter.md`     | outline of the implementation: driver, lexer, parser, codegen, VM |
+| `docs/implementation-plan.md` | How everything should be implemented. |
+
+The Rust crate `mend` (`Cargo.toml`, `src/`) implements them. This file
+collects what was learned while writing the RFCs, so later RFCs and the
+implementation stay consistent with them.
 
 ## 0. Writing style (mandatory)
 
@@ -26,8 +36,8 @@ consistent with it.
 - **Design from the brief when told to.** If the request says "do not read
   this directory" or "design from scratch", read nothing in the project except
   what the prompt names, and don't let existing drafts or code shape the
-  design. (The first Mend attempt was interrupted for opening an older RFC in
-  `docs/`.) External references the prompt names, such as a GitHub repo,
+  design. (The first Mend attempt was interrupted for opening an older
+  RFC.) External references the prompt names, such as a GitHub repo,
   should still be studied.
 - **Clone reference repos into the scratchpad**, never into the project. For
   a language reference, read its `grammar.ebnf`, `ast.rs`, the parser's
@@ -45,7 +55,7 @@ consistent with it.
   These are data files, not machine code, so there is no security model,
   sandbox, or executable-format knowledge to cover. Say so once, in
   Motivation or Non-goals.
-- Output is a Markdown file in this directory, written locally. Don't publish
+- Output is a Markdown file in `docs/`, written locally. Don't publish
   it as an artifact or a doc unless asked.
 
 ## 2. RFC skeleton
@@ -73,7 +83,8 @@ Use this order. Number the sections and refer to them as `§N.M` throughout.
     numbered **disambiguation notes**.
 11. **Future possibilities**, **Alternatives considered** (a table: option,
     why rejected), and **Unresolved questions** (labelled `Q1`, `Q2`, …, each
-    with the tradeoff stated).
+    with the tradeoff stated). Once the author decides them, the section
+    reads "None" followed by a table: question, decision, where (`§N`).
 12. **Appendix: worked examples** that use features together.
 
 Style: put information in tables (types, operators, precedence, error kinds,
@@ -124,18 +135,23 @@ Reuse these in follow-up language RFCs unless the brief says otherwise.
 ## 4. Mend facts that later RFCs must stay consistent with
 
 - **Execution model:** one input file per run:
-  `mend <program.mend> <input> [-o <output>] [-D name=value]…`. The default output is
+  `mend <program.mend> <input> [-o <output>] [-D name=value]… [--dry-run]
+  [--max-steps <n>]`, plus `-I <dir>` and `mend --emit asm <program.mend>`
+  (Mend §5.1). The default output is
   `{FILENAME}.out`, which is `<input>` with `.out` appended. The input is
   loaded implicitly as the **content**. There are no file handles and no
-  `open`/`save`. The output is written atomically, only on success.
-- **`main :: ()` is required.** Run order: top-level statements, then load
-  the input, then `main`, then write the output. **Content operations** (typed
+  `open`/`save`. The output is written atomically, only on success. Exit
+  codes: 0 success, 1 runtime error, 2 compile error, 3 I/O error, 4 usage
+  error.
+- **`main :: ()` is required.** Run order: compile, bind parameters, run
+  top-level statements, load the input, run `main`, write the output. **Content operations** (typed
   access, views, struct fields, edit statements, `batch`, a dynamic
-  `endian`, content functions such as `len()`/`find`) are valid only in
-  `main` or in a *content function*. The compiler infers content functions
-  over the call graph, and they are callable or nameable only from `main` or
-  other content functions. Top-level statements (`assert`, bindings,
-  constant `endian`) cannot touch the content. Top-level bindings are
+  `endian`, content functions such as `len()`/`find`) are valid in any
+  function or lambda, `main` included, and invalid only at the top level.
+  The compiler infers *content functions* (those that perform or reach a
+  content operation) over the call graph; the top level cannot call or name
+  them. Top-level statements (`assert`, bindings, constant `endian`) cannot
+  touch the content. Top-level bindings are
   visible in `main`.
 - **Declarative core:** typed content access `T[at]`, `T[r]` and
   `T.be[at]`; views `name :: T[at];`, whose offset is re-evaluated on every
@@ -149,6 +165,11 @@ Reuse these in follow-up language RFCs unless the brief says otherwise.
   `Name.field = v`. Field offsets are absolute and may refer to sibling
   fields by bare name. A struct is not a type and has no instances; `Name`
   alone is not an expression.
+- **Enums:** `Name :: enum T { VARIANT = value, … }`, with `T` an integer
+  type and every value explicit (implicit numbering is E0607). A variant is
+  the constant `Name.VARIANT` of type `T`, never `Name::VARIANT`, and is
+  never imported on its own. An enum is not a type; validate content values
+  with `Name.contains(v)` and name them with `Name.name_of(v) -> Opt[str]`.
 - **Modules:** one `.mend` file per module. `use a::b::file [as alias];`
   makes items available as `file::NAME` or `alias::NAME`. Item imports are
   `use a::b::file::{A, B as C};` and `use a::b::file::*;`. Paths resolve to
@@ -168,11 +189,13 @@ Reuse these in follow-up language RFCs unless the brief says otherwise.
   constants, so the compiled form never depends on arguments.
 - **Strings:** only `f"…"` interpolates. Plain strings treat `{ }` literally.
 - **Errors are not recoverable.** No `try`/`catch`/`Result`; expected
-  failures use `?T` forms (`find`, `T.get(at)`, `checked_*`, `parse`, …).
+  failures use `Opt[T]` forms (`find`, `T.get(at)`, `checked_*`,
+  `try_into`, `parse`, …).
 - **Types:** Rust primitives, with `usize`/`isize` as aliases of `u64`/`i64`. `[T]` is
   an owned sequence with value semantics (copy-on-write), not a borrowed
-  slice. `?T`, `!`, `str`, and the built-in types `Pat`, `Match[P]`,
-  `Range[T]` and `Endian`. Built-in type arguments go in `[ ]`.
+  slice. `!`, `str`, and the built-in types `Opt[T]`, `Pat`, `Match[P]`,
+  `Range[T]` and `Endian`. Built-in type arguments go in `[ ]`. The `?T`
+  sigil was rejected because it reads as part of `??` and pattern wildcards.
 - **Precedence:** Rust's order, plus `??` just above comparisons. `++` means
   concatenation. `+% -% *%` are wrapping operators.
 - **Byte-order precedence:** an explicit `T.le`/`T.be` (or a `to_bytes(e)`
@@ -184,12 +207,19 @@ Reuse these in follow-up language RFCs unless the brief says otherwise.
   shortest-first gaps, and no pattern that can match zero bytes.
 - **Edit semantics:** the marker-adjustment table in §14.4 and the conflict
   rules for `batch { … }` in §14.3. The batch region is lowered as explicit
-  `batch_begin`/`batch_end` instructions, with `batch_end` on every exit
-  except error paths.
-- **Instruction-set RFC contract:** §18.3 of the Mend RFC. Re-read it
-  before writing the companion RFC. That RFC owns the register/stack model,
-  encoding, calling convention, closure representation, and whether "JIT"
-  means native code or threaded code.
+  `batch_begin`/`batch_end` instructions (MBC `bbeg`/`bend`), with
+  `batch_end` on every exit except error paths.
+- **Instruction-set contract:** Mend §18.3, answered by bytecode §19. Re-read
+  both before changing either RFC or the backend. The bytecode RFC decides:
+  - "JIT" means compile-on-run; MBC is interpreted, with no native code;
+  - a typed register machine: per-frame scalar (`s0…`, 64-bit) and handle
+    (`h0…`, reference-counted) banks, no runtime type tags;
+  - fixed 64-bit instruction words with 16-bit operands; checked opcodes by
+    default; a structural verifier; `.mbc` as the serialized form;
+  - closures capture by value via `mkclos`; known callees use `call`.
+- **Open requests from bytecode §19.3** to the language RFC: diagnostic
+  range E07xx for backend and const-eval errors, and running const-eval on
+  lowered code (Mend §18.2 still says Typed Core).
 
 ## 5. Self-review checklist before finishing an RFC
 

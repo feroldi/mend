@@ -1,3 +1,6 @@
-fn main() {
-    println!("Hello, world!");
-}
+mod driver;
+
+#[cfg(test)]
+mod tests;
+
+fn main() {}
