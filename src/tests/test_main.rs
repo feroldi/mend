@@ -135,3 +135,24 @@ fn test_decl_without_value() {
         |"#,
     );
 }
+
+#[test]
+fn test_main_declared_twice() {
+    let program = compile(
+        r#"
+        |main :: () {}
+        |main :: () {}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0005]: `main` is declared more than once
+        | --> <source>:2:1
+        |  |
+        |2 | main :: () {}
+        |  | ^^^^ `main` redeclared here
+        |"#,
+    );
+}

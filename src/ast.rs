@@ -1,4 +1,5 @@
 use crate::interner::Symbol;
+use crate::source_map::Span;
 
 #[derive(Clone, Copy)]
 pub(crate) struct Program<'ctx> {
@@ -8,6 +9,7 @@ pub(crate) struct Program<'ctx> {
 #[derive(Clone, Copy)]
 pub(crate) struct Decl<'ctx> {
     pub(crate) identifier: Symbol,
+    pub(crate) identifier_span: Span,
     pub(crate) value: &'ctx Expr<'ctx>,
 }
 

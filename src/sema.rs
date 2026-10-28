@@ -15,15 +15,23 @@ impl<'ctx> Sema<'ctx> {
         &mut self,
         program: Program<'ctx>,
     ) -> Result<Program<'ctx>, DiagnosticBag> {
-        let has_main = program
+        let mut main_decls = program
             .decls
             .iter()
-            .any(|decl| self.ctx.resolve_symbol(decl.identifier) == "main");
+            .filter(|decl| self.ctx.resolve_symbol(decl.identifier) == "main");
 
-        if !has_main {
+        if main_decls.next().is_none() {
             return Err(DiagnosticBag::with_diag(
                 Diagnostic::builder(Diag::MainNotFound)
                     .help("add `main :: () {}` to the root module")
+                    .build(),
+            ));
+        }
+
+        if let Some(redeclared_main) = main_decls.next() {
+            return Err(DiagnosticBag::with_diag(
+                Diagnostic::builder(Diag::MainDeclaredTwice)
+                    .label(redeclared_main.identifier_span, "`main` redeclared here")
                     .build(),
             ));
         }

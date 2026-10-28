@@ -43,6 +43,7 @@ impl From<Diagnostic> for DiagnosticBag {
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub(crate) enum Diag {
     MainNotFound,
+    MainDeclaredTwice,
     ExpectedButFound {
         expected: TokenKind,
         found: TokenKind,
@@ -60,6 +61,7 @@ impl Diag {
             Diag::ExpectedButFound { .. } => "E0002",
             Diag::ExpectedExpression { .. } => "E0003",
             Diag::UnknownCharacter(_) => "E0004",
+            Diag::MainDeclaredTwice => "E0005",
         }
     }
 }
@@ -68,6 +70,7 @@ impl fmt::Display for Diag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Diag::MainNotFound => write!(f, "`main` function not found"),
+            Diag::MainDeclaredTwice => write!(f, "`main` is declared more than once"),
             Diag::ExpectedButFound { expected, found } => {
                 write!(f, "expected {expected}, found {found}")
             }

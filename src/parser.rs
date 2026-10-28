@@ -49,6 +49,7 @@ impl<'ctx> Parser<'ctx> {
 
         Ok(Decl {
             identifier,
+            identifier_span: ident_tok.span,
             value: self.ctx.alloc_expr(expr),
         })
     }

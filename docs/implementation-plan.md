@@ -130,6 +130,8 @@ Pick a Mend language functionality, and do the following on a repeat, until it i
 
 ## Functionalities
 
+Once a functionality is implemented, tick off the item in the list below.
+
 - [ ] Program skeleton and `main`
 - [ ] Bindings
 - [ ] Literals and lexing
