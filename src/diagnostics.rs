@@ -35,6 +35,12 @@ impl DiagnosticBag {
     }
 }
 
+impl From<Diagnostic> for DiagnosticBag {
+    fn from(diagnostic: Diagnostic) -> DiagnosticBag {
+        DiagnosticBag::with_diag(diagnostic)
+    }
+}
+
 pub(crate) struct Diagnostic {
     pub(crate) code: DiagnosticCode,
     pub(crate) message: String,
@@ -53,6 +59,7 @@ pub(crate) enum DiagnosticCode {
     E0002,
     E0003,
     E0004,
+    E0005,
 }
 
 impl Diagnostic {
@@ -95,6 +102,7 @@ impl fmt::Display for DiagnosticCode {
             DiagnosticCode::E0002 => write!(f, "E0002"),
             DiagnosticCode::E0003 => write!(f, "E0003"),
             DiagnosticCode::E0004 => write!(f, "E0004"),
+            DiagnosticCode::E0005 => write!(f, "E0005"),
         }
     }
 }

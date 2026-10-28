@@ -1,5 +1,6 @@
 use crate::driver;
 
+mod test_lexing;
 mod test_main;
 
 fn compile(source_code: &str) -> Result<String, String> {

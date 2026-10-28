@@ -8,12 +8,8 @@ pub(crate) fn compile(source_code: &str) -> Result<String, String> {
     let source_map = SourceMap::new(SourceMap::DEFAULT_SOURCE_NAME.into(), source_code.into());
     let context = CompilerContext::new(source_map);
 
-    let tokens = {
-        let mut scanner = Scanner::new(&context);
-        scanner.scan_all_tokens()
-    };
-
-    let mut parser = Parser::new(tokens, &context);
+    let scanner = Scanner::new(&context);
+    let mut parser = Parser::new(scanner, &context);
     let program = parser
         .parse_program()
         .map_err(|diagnostics| diagnostics.render(context.get_source_map()))?;

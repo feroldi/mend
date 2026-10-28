@@ -1,31 +1,30 @@
 use crate::ast::*;
 use crate::compiler_context::CompilerContext;
 use crate::diagnostics::{Diagnostic, DiagnosticBag, DiagnosticCode, Label};
-use crate::scanner::{Delim, Keyword, Token, TokenKind};
+use crate::scanner::{Delim, Keyword, Scanner, Token, TokenKind};
 use crate::sema::Sema;
-use crate::source_map::{BytePos, Span};
 
 pub(crate) struct Parser<'ctx> {
     ctx: &'ctx CompilerContext,
     sema: Sema<'ctx>,
-    tokens: Vec<Token>,
-    current_token_idx: usize,
+    scanner: Scanner<'ctx>,
+    cached_peek_tok: Option<Token>,
 }
 
 impl<'ctx> Parser<'ctx> {
-    pub(crate) fn new(tokens: Vec<Token>, ctx: &'ctx CompilerContext) -> Parser<'ctx> {
+    pub(crate) fn new(scanner: Scanner<'ctx>, ctx: &'ctx CompilerContext) -> Parser<'ctx> {
         Parser {
             ctx,
             sema: Sema::new(ctx),
-            tokens,
-            current_token_idx: 0,
+            scanner,
+            cached_peek_tok: None,
         }
     }
 
     pub(crate) fn parse_program(&mut self) -> Result<Program<'ctx>, DiagnosticBag> {
         let mut decls = vec![];
 
-        while self.peek().is_some() {
+        while self.peek_tok()?.kind != TokenKind::Eof {
             let decl = self.parse_decl()?;
             decls.push(decl);
         }
@@ -38,14 +37,12 @@ impl<'ctx> Parser<'ctx> {
     }
 
     fn parse_decl(&mut self) -> Result<Decl<'ctx>, DiagnosticBag> {
-        let ident_tok = self.expect(TokenKind::Identifier, DiagnosticCode::E0002, "identifier")?;
+        let ident_tok =
+            self.expect_and_consume_tok(TokenKind::Identifier, DiagnosticCode::E0002)?;
 
-        self.expect(TokenKind::ColonColon, DiagnosticCode::E0003, "`::`")?;
+        self.expect_and_consume_tok(TokenKind::ColonColon, DiagnosticCode::E0003)?;
 
-        let expr_tok = self.peek();
-        let expr = self.parse_statement_expr().ok_or_else(|| {
-            self.make_expected_diagnostic(DiagnosticCode::E0004, "expression", expr_tok)
-        })?;
+        let expr = self.parse_statement_expr()?;
 
         let identifier = self
             .ctx
@@ -57,130 +54,131 @@ impl<'ctx> Parser<'ctx> {
         })
     }
 
-    fn parse_statement_expr(&mut self) -> Option<Expr<'ctx>> {
-        let tok = self.consume()?;
+    fn parse_statement_expr(&mut self) -> Result<Expr<'ctx>, DiagnosticBag> {
+        let tok = self.consume_tok()?;
 
         match tok.kind {
             TokenKind::Keyword(Keyword::Return) => self.parse_return_expr(),
             TokenKind::Open(Delim::Paren) => self.parse_function(),
-            _ => None,
+            _ => Err(self
+                .make_expected_diagnostic(DiagnosticCode::E0004, "expression", tok)
+                .into()),
         }
     }
 
-    fn parse_expr(&mut self) -> Option<Expr<'ctx>> {
+    fn parse_expr(&mut self) -> Result<Expr<'ctx>, DiagnosticBag> {
         let stmt_expr = self.parse_statement_expr()?;
 
-        if self.peek()?.kind == TokenKind::Semi {
-            self.consume()?;
+        if self.peek_tok()?.kind == TokenKind::Semi {
+            self.consume_tok()?;
 
-            Some(Expr::Semi(self.ctx.alloc_expr(stmt_expr)))
+            Ok(Expr::Semi(self.ctx.alloc_expr(stmt_expr)))
         } else {
-            Some(stmt_expr)
+            Ok(stmt_expr)
         }
     }
 
-    fn parse_return_expr(&mut self) -> Option<Expr<'ctx>> {
-        Some(Expr::Return)
+    fn parse_return_expr(&mut self) -> Result<Expr<'ctx>, DiagnosticBag> {
+        Ok(Expr::Return)
     }
 
-    fn parse_function(&mut self) -> Option<Expr<'ctx>> {
-        let closed_paren = self.consume()?;
+    fn parse_function(&mut self) -> Result<Expr<'ctx>, DiagnosticBag> {
+        let closed_paren = self.consume_tok()?;
         debug_assert_eq!(closed_paren.kind, TokenKind::Closed(Delim::Paren));
 
-        let open_curly_tok = self.consume()?;
+        let open_curly_tok = self.consume_tok()?;
         debug_assert_eq!(open_curly_tok.kind, TokenKind::Open(Delim::Curly));
 
         let compound_expr = self.parse_compound_expr(open_curly_tok)?;
 
-        Some(Expr::Function(Function {
+        Ok(Expr::Function(Function {
             body: compound_expr,
         }))
     }
 
-    fn parse_compound_expr(&mut self, open_curly_tok: Token) -> Option<CompoundExpr<'ctx>> {
+    fn parse_compound_expr(
+        &mut self,
+        open_curly_tok: Token,
+    ) -> Result<CompoundExpr<'ctx>, DiagnosticBag> {
         debug_assert_eq!(open_curly_tok.kind, TokenKind::Open(Delim::Curly));
 
         let mut exprs = vec![];
 
-        while self.peek()?.kind != TokenKind::Closed(Delim::Curly) {
+        while self.peek_tok()?.kind != TokenKind::Closed(Delim::Curly) {
             let expr = self.parse_expr()?;
             exprs.push(expr);
         }
 
-        let closed_curly_tok = self.consume()?;
+        let closed_curly_tok = self.consume_tok()?;
         debug_assert_eq!(closed_curly_tok.kind, TokenKind::Closed(Delim::Curly));
 
-        Some(CompoundExpr {
+        Ok(CompoundExpr {
             exprs: self.ctx.alloc_slice_of_expr(&exprs),
         })
-    }
-
-    fn expect(
-        &mut self,
-        kind: TokenKind,
-        code: DiagnosticCode,
-        expected: &str,
-    ) -> Result<Token, DiagnosticBag> {
-        match self.peek() {
-            Some(tok) if tok.kind == kind => {
-                self.consume();
-
-                Ok(tok)
-            }
-            found_tok => Err(self.make_expected_diagnostic(code, expected, found_tok)),
-        }
     }
 
     fn make_expected_diagnostic(
         &self,
         code: DiagnosticCode,
         expected: &str,
-        found_tok: Option<Token>,
-    ) -> DiagnosticBag {
-        let (found, span) = match found_tok {
-            Some(tok) => (
-                format!("`{}`", self.ctx.get_source_map().get_text_snippet(tok.span)),
-                tok.span,
+        found_tok: Token,
+    ) -> Diagnostic {
+        let found = match found_tok.kind {
+            TokenKind::Eof => found_tok.kind.to_string(),
+            _ => format!(
+                "`{}`",
+                self.ctx.get_source_map().get_text_snippet(found_tok.span)
             ),
-            None => {
-                let end_of_file = self.tokens.last().map_or(0, |tok| tok.span.end.0);
-
-                (
-                    "end of file".into(),
-                    Span {
-                        start: BytePos(end_of_file),
-                        end: BytePos(end_of_file),
-                    },
-                )
-            }
         };
 
-        let mut diagnostics = DiagnosticBag::new();
-
-        diagnostics.add(Diagnostic {
+        Diagnostic {
             code,
             message: format!("expected {expected}, found {found}"),
             label: Some(Label {
-                span,
+                span: found_tok.span,
                 message: format!("expected {expected}"),
             }),
             helps: vec![],
-        });
-
-        diagnostics
+        }
     }
 
-    fn peek(&self) -> Option<Token> {
-        self.tokens.get(self.current_token_idx).copied()
-    }
+    fn expect_and_consume_tok(
+        &mut self,
+        kind: TokenKind,
+        code: DiagnosticCode,
+    ) -> Result<Token, Diagnostic> {
+        let tok = self.peek_tok()?;
 
-    fn consume(&mut self) -> Option<Token> {
-        let peeked_tok = self.peek();
-
-        if self.current_token_idx < self.tokens.len() {
-            self.current_token_idx += 1;
+        if tok.kind != kind {
+            return Err(self.make_expected_diagnostic(code, &kind.to_string(), tok));
         }
 
-        peeked_tok
+        self.consume_tok()
+    }
+
+    fn consume_tok(&mut self) -> Result<Token, Diagnostic> {
+        // Guarantees that `self.cached_peek_tok` has a peeked token.
+        self.peek_tok()?;
+        debug_assert!(self.cached_peek_tok.is_some());
+
+        let peeked_tok = self.cached_peek_tok.unwrap();
+
+        if peeked_tok.kind != TokenKind::Eof {
+            self.cached_peek_tok = None;
+        }
+
+        Ok(peeked_tok)
+    }
+
+    fn peek_tok(&mut self) -> Result<Token, Diagnostic> {
+        match self.cached_peek_tok {
+            Some(peeked_tok) => Ok(peeked_tok),
+            _ => {
+                let peeked_tok = self.scanner.scan_next_token()?;
+                self.cached_peek_tok = Some(peeked_tok);
+
+                Ok(peeked_tok)
+            }
+        }
     }
 }

@@ -1,7 +1,9 @@
+use std::fmt;
 use std::iter::Peekable;
 use std::str::Chars;
 
 use crate::compiler_context::CompilerContext;
+use crate::diagnostics::{Diagnostic, DiagnosticCode, Label};
 use crate::source_map::{BytePos, Span};
 
 pub(crate) struct Scanner<'ctx> {
@@ -21,23 +23,13 @@ impl<'ctx> Scanner<'ctx> {
         }
     }
 
-    pub(crate) fn scan_all_tokens(&mut self) -> Vec<Token> {
-        let mut tokens = vec![];
-
-        while let Some(token) = self.scan_next_token() {
-            tokens.push(token)
-        }
-
-        tokens
-    }
-
-    fn scan_next_token(&mut self) -> Option<Token> {
+    pub(crate) fn scan_next_token(&mut self) -> Result<Token, Diagnostic> {
         self.skip_whitespace();
 
         let span_start = self.current_peek_pos;
 
         let token_kind = match self.bump() {
-            Scanner::EOF_CHAR => return None,
+            Scanner::EOF_CHAR => TokenKind::Eof,
             ';' => TokenKind::Semi,
             ':' if self.peek() == ':' => {
                 self.bump();
@@ -49,7 +41,20 @@ impl<'ctx> Scanner<'ctx> {
             '{' => TokenKind::Open(Delim::Curly),
             '}' => TokenKind::Closed(Delim::Curly),
             'a'..='z' | 'A'..='Z' | '_' => self.scan_identifier(span_start),
-            ch => todo!("char not recognized: '{}'", ch),
+            ch => {
+                return Err(Diagnostic {
+                    code: DiagnosticCode::E0005,
+                    message: format!("unknown character `{ch}`"),
+                    label: Some(Label {
+                        span: Span {
+                            start: span_start,
+                            end: self.current_peek_pos,
+                        },
+                        message: "unknown character".into(),
+                    }),
+                    helps: vec![],
+                });
+            }
         };
 
         let token_span = Span {
@@ -57,7 +62,7 @@ impl<'ctx> Scanner<'ctx> {
             end: self.current_peek_pos,
         };
 
-        Some(Token {
+        Ok(Token {
             kind: token_kind,
             span: token_span,
         })
@@ -112,6 +117,7 @@ pub(crate) struct Token {
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub(crate) enum TokenKind {
+    Eof,
     Identifier,
     ColonColon,
     Semi,
@@ -129,4 +135,20 @@ pub(crate) enum Keyword {
 pub(crate) enum Delim {
     Paren,
     Curly,
+}
+
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TokenKind::Eof => write!(f, "end of file"),
+            TokenKind::Identifier => write!(f, "identifier"),
+            TokenKind::ColonColon => write!(f, "`::`"),
+            TokenKind::Semi => write!(f, "`;`"),
+            TokenKind::Keyword(Keyword::Return) => write!(f, "`return`"),
+            TokenKind::Open(Delim::Paren) => write!(f, "`(`"),
+            TokenKind::Closed(Delim::Paren) => write!(f, "`)`"),
+            TokenKind::Open(Delim::Curly) => write!(f, "`{{`"),
+            TokenKind::Closed(Delim::Curly) => write!(f, "`}}`"),
+        }
+    }
 }
