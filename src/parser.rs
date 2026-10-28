@@ -100,12 +100,29 @@ impl<'ctx> Parser<'ctx> {
             return self.parse_bind_def_expr(ident_tok, false);
         }
 
+        if self.try_consume_tok(TokenKind::Equal)? {
+            return self.parse_assign_expr(ident_tok);
+        }
+
         let identifier = self
             .ctx
             .get_or_intern_str(self.ctx.get_source_map().get_text_snippet(ident_tok.span));
 
         self.sema
             .act_on_bind_ref(BindRef { identifier }, ident_tok.span)
+    }
+
+    fn parse_assign_expr(&mut self, ident_tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
+        let value = self.parse_statement_expr()?;
+
+        let identifier = self
+            .ctx
+            .get_or_intern_str(self.ctx.get_source_map().get_text_snippet(ident_tok.span));
+
+        Ok(Expr::Assign(AssignExpr {
+            identifier,
+            value: self.ctx.alloc_expr(value),
+        }))
     }
 
     fn parse_mut_bind_def_expr(&mut self) -> Result<Expr<'ctx>, DiagnosticBag> {

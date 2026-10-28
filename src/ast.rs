@@ -18,6 +18,7 @@ pub(crate) enum Expr<'ctx> {
     Const(Const),
     BindRef(BindRef),
     BindDef(BindDef<'ctx>),
+    Assign(AssignExpr<'ctx>),
     Function(Function<'ctx>),
     Compound(CompoundExpr<'ctx>),
     Return,
@@ -39,6 +40,12 @@ pub(crate) struct BindDef<'ctx> {
     pub(crate) identifier: Symbol,
     pub(crate) is_mutable: bool,
     pub(crate) ty: Option<Type>,
+    pub(crate) value: &'ctx Expr<'ctx>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct AssignExpr<'ctx> {
+    pub(crate) identifier: Symbol,
     pub(crate) value: &'ctx Expr<'ctx>,
 }
 

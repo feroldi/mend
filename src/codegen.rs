@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::ast::{BindDef, BindRef, CompoundExpr, Const, Decl, Expr, Function, Program, Type};
+use crate::ast::{
+    AssignExpr, BindDef, BindRef, CompoundExpr, Const, Decl, Expr, Function, Program, Type,
+};
 use crate::compiler_context::CompilerContext;
 use crate::interner::Symbol;
 
@@ -9,7 +11,7 @@ pub(crate) struct CodeGen<'ctx> {
     ctx: &'ctx CompilerContext,
     emitted_insts: Vec<Inst>,
     scalar_frame_size: usize,
-    scope_stack: Vec<HashMap<Symbol, ScalarReg>>,
+    scope_stack: Vec<HashMap<Symbol, Binding>>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -64,6 +66,7 @@ impl<'ctx> CodeGen<'ctx> {
             Expr::Semi(expr) => self.gen_expr(expr),
             Expr::Return => self.gen_return_expr(),
             Expr::BindDef(bind_def) => self.gen_bind_def_expr(*bind_def),
+            Expr::Assign(assign_expr) => self.gen_assign_expr(*assign_expr),
             Expr::Compound(compound_expr) => self.gen_compound_expr(*compound_expr),
             Expr::Const(_) | Expr::BindRef(_) | Expr::Function(_) => unimplemented!(),
         }
@@ -97,13 +100,20 @@ impl<'ctx> CodeGen<'ctx> {
 
         self.gen_expr_to_reg(bind_def.value, ty, dest);
 
-        self.get_this_scope_mut().insert(bind_def.identifier, dest);
+        self.get_this_scope_mut()
+            .insert(bind_def.identifier, Binding { reg: dest, ty });
     }
 
     fn gen_bind_ref_expr(&mut self, bind_ref: BindRef, dest: ScalarReg) {
-        let source = self.find_in_scope(bind_ref.identifier);
+        let source = self.find_in_scope(bind_ref.identifier).reg;
 
         self.emit(Inst::Mov { dest, source });
+    }
+
+    fn gen_assign_expr(&mut self, assign_expr: AssignExpr) {
+        let binding = self.find_in_scope(assign_expr.identifier);
+
+        self.gen_expr_to_reg(assign_expr.value, binding.ty, binding.reg);
     }
 
     fn gen_compound_expr(&mut self, compound_expr: CompoundExpr) {
@@ -124,11 +134,11 @@ impl<'ctx> CodeGen<'ctx> {
         self.scope_stack.pop();
     }
 
-    fn get_this_scope_mut(&mut self) -> &mut HashMap<Symbol, ScalarReg> {
+    fn get_this_scope_mut(&mut self) -> &mut HashMap<Symbol, Binding> {
         self.scope_stack.last_mut().unwrap()
     }
 
-    fn find_in_scope(&self, identifier: Symbol) -> ScalarReg {
+    fn find_in_scope(&self, identifier: Symbol) -> Binding {
         self.scope_stack
             .iter()
             .rev()
@@ -150,6 +160,12 @@ impl<'ctx> CodeGen<'ctx> {
     fn emit(&mut self, inst: Inst) {
         self.emitted_insts.push(inst);
     }
+}
+
+#[derive(Clone, Copy)]
+struct Binding {
+    reg: ScalarReg,
+    ty: ScalarType,
 }
 
 pub(crate) struct MbcProgram<'ctx> {
