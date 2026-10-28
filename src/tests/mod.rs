@@ -1,5 +1,6 @@
 use crate::driver;
 
+mod test_bindings;
 mod test_lexing;
 mod test_main;
 

@@ -31,11 +31,17 @@ impl<'ctx> Scanner<'ctx> {
 
                 TokenKind::ColonColon
             }
+            ':' if self.peek() == '=' => {
+                self.bump();
+
+                TokenKind::ColonEqual
+            }
             '(' => TokenKind::Open(Delim::Paren),
             ')' => TokenKind::Closed(Delim::Paren),
             '{' => TokenKind::Open(Delim::Curly),
             '}' => TokenKind::Closed(Delim::Curly),
             'a'..='z' | 'A'..='Z' | '_' => self.scan_identifier(span_start),
+            '0'..='9' => self.scan_numeric_constant(),
             ch => {
                 let span = Span {
                     start: span_start,
@@ -81,6 +87,14 @@ impl<'ctx> Scanner<'ctx> {
         }
     }
 
+    fn scan_numeric_constant(&mut self) -> TokenKind {
+        while self.peek().is_ascii_digit() {
+            self.bump();
+        }
+
+        TokenKind::NumericConstant
+    }
+
     fn peek(&mut self) -> char {
         self.char_stream.peek()
     }
@@ -100,7 +114,9 @@ pub(crate) struct Token {
 pub(crate) enum TokenKind {
     Eof,
     Identifier,
+    NumericConstant,
     ColonColon,
+    ColonEqual,
     Semi,
     Keyword(Keyword),
     Open(Delim),
@@ -123,7 +139,9 @@ impl fmt::Display for TokenKind {
         match self {
             TokenKind::Eof => write!(f, "end of file"),
             TokenKind::Identifier => write!(f, "identifier"),
+            TokenKind::NumericConstant => write!(f, "numeric constant"),
             TokenKind::ColonColon => write!(f, "`::`"),
+            TokenKind::ColonEqual => write!(f, "`:=`"),
             TokenKind::Semi => write!(f, "`;`"),
             TokenKind::Keyword(Keyword::Return) => write!(f, "`return`"),
             TokenKind::Open(Delim::Paren) => write!(f, "`(`"),

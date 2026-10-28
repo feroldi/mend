@@ -1,16 +1,20 @@
 use std::fmt;
 
-use crate::ast::{CompoundExpr, Decl, Expr, Function, Program};
+use crate::ast::{BindDef, CompoundExpr, Const, Decl, Expr, Function, Program};
 use crate::compiler_context::CompilerContext;
 use crate::interner::Symbol;
 
 pub(crate) struct CodeGen<'ctx> {
     ctx: &'ctx CompilerContext,
+    scalar_frame_size: usize,
 }
 
 impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn new(ctx: &'ctx CompilerContext) -> CodeGen<'ctx> {
-        CodeGen { ctx }
+        CodeGen {
+            ctx,
+            scalar_frame_size: 0,
+        }
     }
 
     pub(crate) fn gen_program(&mut self, program: Program) -> MbcProgram<'ctx> {
@@ -34,6 +38,8 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn gen_function(&mut self, name: Symbol, body: CompoundExpr) -> MbcFunction {
+        self.scalar_frame_size = 0;
+
         let mut insts: Vec<Inst> = body.exprs.iter().flat_map(|e| self.gen_expr(e)).collect();
 
         if !matches!(insts.last(), Some(Inst::Ret)) {
@@ -42,7 +48,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         MbcFunction {
             name,
-            scalar_frame_size: 0,
+            scalar_frame_size: self.scalar_frame_size,
             handle_frame_size: 0,
             insts,
         }
@@ -52,8 +58,39 @@ impl<'ctx> CodeGen<'ctx> {
         match expr {
             Expr::Semi(expr) => self.gen_expr(expr),
             Expr::Return => self.gen_return_expr(),
-            Expr::Function(_) => unimplemented!(),
+            Expr::BindDef(bind_def) => self.gen_bind_def_expr(*bind_def),
+            Expr::Const(_) | Expr::Function(_) => unimplemented!(),
         }
+    }
+
+    fn gen_expr_into(&mut self, expr: &Expr, dest: ScalarReg) -> Vec<Inst> {
+        match expr {
+            Expr::Const(constant) => self.gen_constant_expr(*constant, dest),
+            _ => unimplemented!(),
+        }
+    }
+
+    fn gen_constant_expr(&mut self, constant: Const, dest: ScalarReg) -> Vec<Inst> {
+        match constant {
+            Const::Integer { value } => vec![Inst::Ldi {
+                ty: ScalarType::I32,
+                dest,
+                imm: value as i32,
+            }],
+        }
+    }
+
+    fn gen_bind_def_expr(&mut self, bind_def: BindDef) -> Vec<Inst> {
+        let dest = self.alloc_scalar_reg();
+
+        self.gen_expr_into(bind_def.value, dest)
+    }
+
+    fn alloc_scalar_reg(&mut self) -> ScalarReg {
+        let reg = ScalarReg(self.scalar_frame_size);
+        self.scalar_frame_size += 1;
+
+        reg
     }
 
     fn gen_return_expr(&mut self) -> Vec<Inst> {
@@ -75,7 +112,20 @@ struct MbcFunction {
 
 #[derive(Clone, Copy)]
 enum Inst {
+    Ldi {
+        ty: ScalarType,
+        dest: ScalarReg,
+        imm: i32,
+    },
     Ret,
+}
+
+#[derive(Clone, Copy)]
+struct ScalarReg(usize);
+
+#[derive(Clone, Copy)]
+enum ScalarType {
+    I32,
 }
 
 impl fmt::Display for MbcProgram<'_> {
@@ -103,7 +153,34 @@ impl fmt::Display for MbcProgram<'_> {
 impl fmt::Display for Inst {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Inst::Ldi { ty, dest, imm } => {
+                write_mnemonic(f, &format!("ldi.{ty}"))?;
+                write!(f, "{dest}, {imm}")
+            }
             Inst::Ret => write!(f, "ret"),
+        }
+    }
+}
+
+/// Pads the mnemonic so that the operands start at the next multiple of 4 columns.
+fn write_mnemonic(f: &mut fmt::Formatter<'_>, mnemonic: &str) -> fmt::Result {
+    const TAB_WIDTH: usize = 4;
+
+    let width = (mnemonic.len() / TAB_WIDTH + 1) * TAB_WIDTH;
+
+    write!(f, "{mnemonic:<width$}")
+}
+
+impl fmt::Display for ScalarReg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "s{}", self.0)
+    }
+}
+
+impl fmt::Display for ScalarType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ScalarType::I32 => write!(f, "i32"),
         }
     }
 }

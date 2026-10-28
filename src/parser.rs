@@ -1,5 +1,6 @@
 use crate::ast::*;
 use crate::compiler_context::CompilerContext;
+use crate::constant_parser::{NumConst, parse_numeric_constant};
 use crate::diagnostics::{Diag, Diagnostic, DiagnosticBag};
 use crate::scanner::{Delim, Keyword, Scanner, Token, TokenKind};
 use crate::sema::Sema;
@@ -58,6 +59,8 @@ impl<'ctx> Parser<'ctx> {
         let tok = self.consume_tok()?;
 
         match tok.kind {
+            TokenKind::NumericConstant => self.parse_numeric_constant(tok),
+            TokenKind::Identifier => self.parse_bind_def_expr(tok),
             TokenKind::Keyword(Keyword::Return) => self.parse_return_expr(),
             TokenKind::Open(Delim::Paren) => self.parse_function(),
             found => Err(Diagnostic::builder(Diag::ExpectedExpression { found })
@@ -77,6 +80,31 @@ impl<'ctx> Parser<'ctx> {
         } else {
             Ok(stmt_expr)
         }
+    }
+
+    fn parse_numeric_constant(&mut self, tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
+        let lexeme = self.ctx.get_source_map().get_text_snippet(tok.span);
+
+        match parse_numeric_constant(lexeme).num_const {
+            NumConst::Int(integer) => Ok(Expr::Const(Const::Integer {
+                value: integer.value,
+            })),
+        }
+    }
+
+    fn parse_bind_def_expr(&mut self, ident_tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
+        self.expect_and_consume_tok(TokenKind::ColonEqual)?;
+
+        let value = self.parse_statement_expr()?;
+
+        let identifier = self
+            .ctx
+            .get_or_intern_str(self.ctx.get_source_map().get_text_snippet(ident_tok.span));
+
+        Ok(Expr::BindDef(BindDef {
+            identifier,
+            value: self.ctx.alloc_expr(value),
+        }))
     }
 
     fn parse_return_expr(&mut self) -> Result<Expr<'ctx>, DiagnosticBag> {

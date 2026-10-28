@@ -2,6 +2,7 @@ mod ast;
 mod char_stream;
 mod codegen;
 mod compiler_context;
+mod constant_parser;
 mod diagnostics;
 mod driver;
 mod interner;
