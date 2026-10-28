@@ -64,7 +64,11 @@ impl<'ctx> Parser<'ctx> {
             TokenKind::Keyword(Keyword::Mut) => self.parse_mut_bind_def_expr(),
             TokenKind::Keyword(Keyword::Return) => self.parse_return_expr(),
             TokenKind::Open(Delim::Paren) => self.parse_function(),
-            TokenKind::Open(Delim::Curly) => self.parse_compound_expr(tok).map(Expr::Compound),
+            TokenKind::Open(Delim::Curly) => {
+                let compound_expr = self.parse_compound_expr(tok)?;
+
+                Ok(self.sema.act_on_compound_expr(compound_expr))
+            }
             found => Err(Diagnostic::builder(Diag::ExpectedExpression { found })
                 .label(tok.span, "expected expression")
                 .build()
@@ -76,7 +80,7 @@ impl<'ctx> Parser<'ctx> {
         let stmt_expr = self.parse_statement_expr()?;
 
         if self.try_consume_tok(TokenKind::Semi)? {
-            Ok(Expr::Semi(self.ctx.alloc_expr(stmt_expr)))
+            Ok(self.sema.act_on_semi_expr(stmt_expr))
         } else {
             Ok(stmt_expr)
         }
@@ -86,9 +90,11 @@ impl<'ctx> Parser<'ctx> {
         let lexeme = self.ctx.get_source_map().get_text_snippet(tok.span);
 
         match parse_numeric_constant(lexeme).num_const {
-            NumConst::Int(integer) => Ok(Expr::Const(Const::Integer {
-                value: integer.value,
-            })),
+            NumConst::Int(integer) => {
+                let suffix = integer.suffix.map(get_type_name_from_str);
+
+                Ok(self.sema.act_on_integer_constant(integer.value, suffix))
+            }
         }
     }
 
@@ -167,14 +173,13 @@ impl<'ctx> Parser<'ctx> {
     fn parse_type(&mut self) -> Result<Type, DiagnosticBag> {
         let ident_tok = self.expect_and_consume_tok(TokenKind::Identifier)?;
 
-        match self.ctx.get_source_map().get_text_snippet(ident_tok.span) {
-            "u8" => Ok(Type::U8),
-            _ => todo!("other types"),
-        }
+        Ok(get_type_name_from_str(
+            self.ctx.get_source_map().get_text_snippet(ident_tok.span),
+        ))
     }
 
     fn parse_return_expr(&mut self) -> Result<Expr<'ctx>, DiagnosticBag> {
-        Ok(Expr::Return)
+        Ok(self.sema.act_on_return_expr())
     }
 
     fn parse_function(&mut self) -> Result<Expr<'ctx>, DiagnosticBag> {
@@ -184,7 +189,7 @@ impl<'ctx> Parser<'ctx> {
 
         let compound_expr = self.parse_compound_expr(open_curly_tok)?;
 
-        Ok(Expr::Function(Function {
+        Ok(self.sema.act_on_function(Function {
             body: compound_expr,
         }))
     }
@@ -265,5 +270,12 @@ impl<'ctx> Parser<'ctx> {
         } else {
             Ok(false)
         }
+    }
+}
+
+fn get_type_name_from_str(name: &str) -> Type {
+    match name {
+        "u8" => Type::U8,
+        _ => todo!("other types"),
     }
 }

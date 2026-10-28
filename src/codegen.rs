@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::ast::{
-    AssignExpr, BindDef, BindRef, CompoundExpr, Const, Decl, Expr, Function, Program, Type,
+    AssignExpr, BindDef, BindRef, CompoundExpr, Const, Decl, Expr, ExprKind, Function, Program,
+    Type,
 };
 use crate::compiler_context::CompilerContext;
 use crate::interner::Symbol;
@@ -38,8 +39,8 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn gen_decl(&mut self, decl: &Decl) -> MbcFunction {
-        match decl.value {
-            Expr::Function(Function { body }) => self.gen_function(decl.identifier, *body),
+        match decl.value.kind {
+            ExprKind::Function(Function { body }) => self.gen_function(decl.identifier, body),
             _ => todo!("other top-level exprs"),
         }
     }
@@ -62,27 +63,29 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn gen_expr(&mut self, expr: &Expr) {
-        match expr {
-            Expr::Semi(expr) => self.gen_expr(expr),
-            Expr::Return => self.gen_return_expr(),
-            Expr::BindDef(bind_def) => self.gen_bind_def_expr(*bind_def),
-            Expr::Assign(assign_expr) => self.gen_assign_expr(*assign_expr),
-            Expr::Compound(compound_expr) => self.gen_compound_expr(*compound_expr),
-            Expr::Const(_) | Expr::BindRef(_) | Expr::Function(_) => unimplemented!(),
+        match expr.kind {
+            ExprKind::Semi(expr) => self.gen_expr(expr),
+            ExprKind::Return => self.gen_return_expr(),
+            ExprKind::BindDef(bind_def) => self.gen_bind_def_expr(bind_def),
+            ExprKind::Assign(assign_expr) => self.gen_assign_expr(assign_expr),
+            ExprKind::Compound(compound_expr) => self.gen_compound_expr(compound_expr),
+            ExprKind::Const(_) | ExprKind::BindRef(_) | ExprKind::Function(_) => unimplemented!(),
         }
     }
 
-    fn gen_expr_to_reg(&mut self, expr: &Expr, ty: ScalarType, dest: ScalarReg) {
-        match expr {
-            Expr::Const(constant) => self.gen_constant_expr(*constant, ty, dest),
-            Expr::BindRef(bind_ref) => self.gen_bind_ref_expr(*bind_ref, dest),
+    fn gen_expr_to_reg(&mut self, expr: &Expr, dest: ScalarReg) {
+        let scalar_ty = scalar_type_of(expr.ty);
+
+        match expr.kind {
+            ExprKind::Const(constant) => self.gen_constant_expr(constant, scalar_ty, dest),
+            ExprKind::BindRef(bind_ref) => self.gen_bind_ref_expr(bind_ref, dest),
             _ => unimplemented!(),
         }
     }
 
     fn gen_constant_expr(&mut self, constant: Const, ty: ScalarType, dest: ScalarReg) {
         match constant {
-            Const::Integer { value } => self.emit(Inst::Ldi {
+            Const::Integer { value, .. } => self.emit(Inst::Ldi {
                 ty,
                 dest,
                 imm: value as i32,
@@ -93,15 +96,10 @@ impl<'ctx> CodeGen<'ctx> {
     fn gen_bind_def_expr(&mut self, bind_def: BindDef) {
         let dest = self.alloc_scalar_reg();
 
-        let ty = match bind_def.ty {
-            Some(Type::U8) => ScalarType::U8,
-            None => ScalarType::I32,
-        };
-
-        self.gen_expr_to_reg(bind_def.value, ty, dest);
+        self.gen_expr_to_reg(bind_def.value, dest);
 
         self.get_this_scope_mut()
-            .insert(bind_def.identifier, Binding { reg: dest, ty });
+            .insert(bind_def.identifier, Binding { reg: dest });
     }
 
     fn gen_bind_ref_expr(&mut self, bind_ref: BindRef, dest: ScalarReg) {
@@ -114,7 +112,7 @@ impl<'ctx> CodeGen<'ctx> {
         let binding = self.find_in_scope(assign_expr.identifier);
         let value_reg = self.alloc_scalar_reg();
 
-        self.gen_expr_to_reg(assign_expr.value, binding.ty, value_reg);
+        self.gen_expr_to_reg(assign_expr.value, value_reg);
 
         self.emit(Inst::Mov {
             dest: binding.reg,
@@ -168,10 +166,19 @@ impl<'ctx> CodeGen<'ctx> {
     }
 }
 
+fn scalar_type_of(ty: Type) -> ScalarType {
+    match ty {
+        Type::U8 => ScalarType::U8,
+        Type::I32 => ScalarType::I32,
+        Type::IntLiteral | Type::Unit | Type::Never | Type::Function => {
+            unreachable!("{ty:?} is not a scalar type")
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 struct Binding {
     reg: ScalarReg,
-    ty: ScalarType,
 }
 
 pub(crate) struct MbcProgram<'ctx> {

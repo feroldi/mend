@@ -14,7 +14,13 @@ pub(crate) struct Decl<'ctx> {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) enum Expr<'ctx> {
+pub(crate) struct Expr<'ctx> {
+    pub(crate) kind: ExprKind<'ctx>,
+    pub(crate) ty: Type,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum ExprKind<'ctx> {
     Const(Const),
     BindRef(BindRef),
     BindDef(BindDef<'ctx>),
@@ -49,9 +55,16 @@ pub(crate) struct AssignExpr<'ctx> {
     pub(crate) value: &'ctx Expr<'ctx>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub(crate) enum Type {
     U8,
+    I32,
+    /// The type of an unsuffixed integer literal before its use decides it.
+    IntLiteral,
+    Unit,
+    Never,
+    /// The type of a function that takes no arguments and returns `()`.
+    Function,
 }
 
 #[derive(Clone, Copy)]

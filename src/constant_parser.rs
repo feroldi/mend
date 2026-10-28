@@ -1,26 +1,28 @@
 #[derive(PartialEq, Eq, Debug)]
-pub(crate) struct ParseResult {
-    pub(crate) num_const: NumConst,
+pub(crate) struct ParseResult<'a> {
+    pub(crate) num_const: NumConst<'a>,
     pub(crate) has_overflowed: bool,
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub(crate) enum NumConst {
-    Int(IntegerConst),
+pub(crate) enum NumConst<'a> {
+    Int(IntegerConst<'a>),
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub(crate) struct IntegerConst {
+pub(crate) struct IntegerConst<'a> {
     pub(crate) value: u64,
+    pub(crate) suffix: Option<&'a str>,
 }
 
-pub(crate) fn parse_numeric_constant(token_lexeme: &str) -> ParseResult {
+pub(crate) fn parse_numeric_constant(token_lexeme: &str) -> ParseResult<'_> {
     let attrs = parse_num_const_attributes(token_lexeme);
+    let suffix = attrs.suffix;
 
     let (value, has_overflowed) = eval_integer_constant(attrs);
 
     ParseResult {
-        num_const: NumConst::Int(IntegerConst { value }),
+        num_const: NumConst::Int(IntegerConst { value, suffix }),
         has_overflowed,
     }
 }
@@ -28,12 +30,30 @@ pub(crate) fn parse_numeric_constant(token_lexeme: &str) -> ParseResult {
 struct NumConstAttrs<'a> {
     radix: u64,
     digits: &'a [u8],
+    suffix: Option<&'a str>,
 }
 
 fn parse_num_const_attributes(token_lexeme: &str) -> NumConstAttrs<'_> {
-    match token_lexeme.as_bytes() {
-        [b'0', b'x', digits @ ..] => NumConstAttrs { radix: 16, digits },
-        digits => NumConstAttrs { radix: 10, digits },
+    let (radix, prefix_len) = match token_lexeme.as_bytes() {
+        [b'0', b'x', ..] => (16, 2),
+        [b'0', b'b', ..] => (2, 2),
+        [b'0', b'o', ..] => (8, 2),
+        _ => (10, 0),
+    };
+
+    let digits_and_suffix = &token_lexeme[prefix_len..];
+
+    let digits_len = digits_and_suffix
+        .bytes()
+        .take_while(|&ch| ch == b'_' || (ch as char).is_digit(radix as u32))
+        .count();
+
+    let (digits, suffix) = digits_and_suffix.split_at(digits_len);
+
+    NumConstAttrs {
+        radix,
+        digits: digits.as_bytes(),
+        suffix: (!suffix.is_empty()).then_some(suffix),
     }
 }
 
@@ -42,6 +62,10 @@ fn eval_integer_constant(attrs: NumConstAttrs) -> (u64, bool) {
     let mut has_overflowed = false;
 
     for &digit in attrs.digits {
+        if digit == b'_' {
+            continue;
+        }
+
         let (low_mul, overflowed) = value.overflowing_mul(attrs.radix);
         has_overflowed |= overflowed;
         value = low_mul;

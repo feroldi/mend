@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::ast::{AssignExpr, BindDef, BindRef, Expr, Program};
+use crate::ast::{
+    AssignExpr, BindDef, BindRef, CompoundExpr, Const, Expr, ExprKind, Function, Program, Type,
+};
 use crate::compiler_context::CompilerContext;
 use crate::diagnostics::{Diag, Diagnostic, DiagnosticBag};
 use crate::interner::Symbol;
@@ -14,6 +16,7 @@ pub(crate) struct Sema<'ctx> {
 #[derive(Clone, Copy)]
 struct Binding {
     is_mutable: bool,
+    ty: Type,
 }
 
 impl<'ctx> Sema<'ctx> {
@@ -36,10 +39,6 @@ impl<'ctx> Sema<'ctx> {
         self.scope_stack.last_mut().unwrap()
     }
 
-    fn scope_contains(&self, identifier: Symbol) -> bool {
-        self.find_in_scope(identifier).is_some()
-    }
-
     fn find_in_scope(&self, identifier: Symbol) -> Option<Binding> {
         self.scope_stack
             .iter()
@@ -47,15 +46,35 @@ impl<'ctx> Sema<'ctx> {
             .find_map(|scope| scope.get(&identifier).copied())
     }
 
+    pub(crate) fn act_on_integer_constant(
+        &mut self,
+        value: u64,
+        suffix: Option<Type>,
+    ) -> Expr<'ctx> {
+        Expr {
+            kind: ExprKind::Const(Const::Integer { value }),
+            ty: suffix.unwrap_or(Type::IntLiteral),
+        }
+    }
+
     pub(crate) fn act_on_bind_def(&mut self, bind_def: BindDef<'ctx>) -> Expr<'ctx> {
+        let value = self.resolve_literal_type(*bind_def.value, bind_def.ty);
+
         self.get_this_scope_mut().insert(
             bind_def.identifier,
             Binding {
                 is_mutable: bind_def.is_mutable,
+                ty: value.ty,
             },
         );
 
-        Expr::BindDef(bind_def)
+        Expr {
+            kind: ExprKind::BindDef(BindDef {
+                value: self.ctx.alloc_expr(value),
+                ..bind_def
+            }),
+            ty: Type::Unit,
+        }
     }
 
     pub(crate) fn act_on_bind_ref(
@@ -63,11 +82,14 @@ impl<'ctx> Sema<'ctx> {
         bind_ref: BindRef,
         span: Span,
     ) -> Result<Expr<'ctx>, DiagnosticBag> {
-        if !self.scope_contains(bind_ref.identifier) {
+        let Some(binding) = self.find_in_scope(bind_ref.identifier) else {
             return Err(binding_not_found(bind_ref.identifier, span));
-        }
+        };
 
-        Ok(Expr::BindRef(bind_ref))
+        Ok(Expr {
+            kind: ExprKind::BindRef(bind_ref),
+            ty: binding.ty,
+        })
     }
 
     pub(crate) fn act_on_assign(
@@ -92,7 +114,54 @@ impl<'ctx> Sema<'ctx> {
             ));
         }
 
-        Ok(Expr::Assign(assign_expr))
+        let value = self.resolve_literal_type(*assign_expr.value, Some(binding.ty));
+
+        Ok(Expr {
+            kind: ExprKind::Assign(AssignExpr {
+                value: self.ctx.alloc_expr(value),
+                ..assign_expr
+            }),
+            ty: Type::Unit,
+        })
+    }
+
+    pub(crate) fn act_on_compound_expr(&mut self, compound_expr: CompoundExpr<'ctx>) -> Expr<'ctx> {
+        Expr {
+            kind: ExprKind::Compound(compound_expr),
+            ty: Type::Unit,
+        }
+    }
+
+    pub(crate) fn act_on_semi_expr(&mut self, expr: Expr<'ctx>) -> Expr<'ctx> {
+        Expr {
+            kind: ExprKind::Semi(self.ctx.alloc_expr(expr)),
+            ty: Type::Unit,
+        }
+    }
+
+    pub(crate) fn act_on_return_expr(&mut self) -> Expr<'ctx> {
+        Expr {
+            kind: ExprKind::Return,
+            ty: Type::Never,
+        }
+    }
+
+    pub(crate) fn act_on_function(&mut self, function: Function<'ctx>) -> Expr<'ctx> {
+        Expr {
+            kind: ExprKind::Function(function),
+            ty: Type::Function,
+        }
+    }
+
+    fn resolve_literal_type(&self, expr: Expr<'ctx>, expected_ty: Option<Type>) -> Expr<'ctx> {
+        if expr.ty != Type::IntLiteral {
+            return expr;
+        }
+
+        Expr {
+            ty: expected_ty.unwrap_or(Type::I32),
+            ..expr
+        }
     }
 
     pub(crate) fn act_on_program(

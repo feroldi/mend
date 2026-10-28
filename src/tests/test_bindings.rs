@@ -282,3 +282,29 @@ fn test_assign_to_copied_binding() {
         |"#,
     );
 }
+
+#[test]
+fn test_assign_to_binding_with_inferred_type() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x: u8 = 1;
+        |    mut y := x;
+        |    y = 2;
+        |}
+        |"#,
+    );
+
+    check(
+        program,
+        r#"
+        |fn @main () frame s:3 h:0
+        |    ldi.u8 s0, 1
+        |    mov s1, s0
+        |    ldi.u8 s2, 2
+        |    mov s1, s2
+        |    ret
+        |end
+        |"#,
+    );
+}
