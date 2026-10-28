@@ -19,7 +19,7 @@ impl CharStream<'_> {
     pub const EOF_CHAR: char = '\0';
     const LOOKAHEAD_LIMIT: usize = 8;
 
-    pub fn with_text(text: &str) -> CharStream {
+    pub fn with_text(text: &str) -> CharStream<'_> {
         CharStream {
             chars: text.chars(),
             cached_peek: None,
