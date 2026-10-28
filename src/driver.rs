@@ -1,5 +1,6 @@
 use crate::codegen::CodeGen;
 use crate::compiler_context::CompilerContext;
+use crate::diagnostics::HumanEmitter;
 use crate::parser::Parser;
 use crate::scanner::Scanner;
 use crate::source_map::SourceMap;
@@ -10,9 +11,12 @@ pub(crate) fn compile(source_code: &str) -> Result<String, String> {
 
     let scanner = Scanner::new(&context);
     let mut parser = Parser::new(scanner, &context);
-    let program = parser
-        .parse_program()
-        .map_err(|diagnostics| diagnostics.render(context.get_source_map()))?;
+    let program = parser.parse_program().map_err(|diagnostics| {
+        let mut emitter = HumanEmitter::new(context.get_source_map());
+        diagnostics.emit(&mut emitter);
+
+        emitter.into_output()
+    })?;
 
     let mut codegen = CodeGen::new(&context);
     let mbc_program = codegen.gen_program(program);

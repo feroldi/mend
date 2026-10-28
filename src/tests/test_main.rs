@@ -87,7 +87,7 @@ fn test_decl_without_colon_colon() {
     check_fail(
         program,
         r#"
-        |error[E0003]: expected `::`, found `(`
+        |error[E0002]: expected `::`, found `(`
         | --> <source>:2:5
         |  |
         |2 | foo () {}
@@ -107,7 +107,7 @@ fn test_decl_without_colon_colon_at_end_of_file() {
     check_fail(
         program,
         r#"
-        |error[E0003]: expected `::`, found end of file
+        |error[E0002]: expected `::`, found end of file
         | --> <source>:1:5
         |  |
         |1 | main
@@ -127,7 +127,7 @@ fn test_decl_without_value() {
     check_fail(
         program,
         r#"
-        |error[E0004]: expected expression, found `;`
+        |error[E0003]: expected expression, found `;`
         | --> <source>:1:9
         |  |
         |1 | main :: ;

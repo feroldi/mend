@@ -13,7 +13,7 @@ fn test_unknown_character() {
     check_fail(
         program,
         r#"
-        |error[E0005]: unknown character `$`
+        |error[E0004]: unknown character `$`
         | --> <source>:2:5
         |  |
         |2 |     $
@@ -33,7 +33,7 @@ fn test_unknown_non_ascii_character() {
     check_fail(
         program,
         r#"
-        |error[E0005]: unknown character `é`
+        |error[E0004]: unknown character `é`
         | --> <source>:1:14
         |  |
         |1 | main :: () { é }

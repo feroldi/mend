@@ -1,6 +1,6 @@
 use crate::ast::Program;
 use crate::compiler_context::CompilerContext;
-use crate::diagnostics::{Diagnostic, DiagnosticBag, DiagnosticCode};
+use crate::diagnostics::{Diag, Diagnostic, DiagnosticBag};
 
 pub(crate) struct Sema<'ctx> {
     ctx: &'ctx CompilerContext,
@@ -21,12 +21,11 @@ impl<'ctx> Sema<'ctx> {
             .any(|decl| self.ctx.resolve_symbol(decl.identifier) == "main");
 
         if !has_main {
-            return Err(DiagnosticBag::with_diag(Diagnostic {
-                code: DiagnosticCode::E0001,
-                message: "`main` function not found".into(),
-                label: None,
-                helps: vec!["add `main :: () {}` to the root module".into()],
-            }));
+            return Err(DiagnosticBag::with_diag(
+                Diagnostic::builder(Diag::MainNotFound)
+                    .help("add `main :: () {}` to the root module")
+                    .build(),
+            ));
         }
 
         Ok(program)

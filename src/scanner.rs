@@ -3,7 +3,7 @@ use std::iter::Peekable;
 use std::str::Chars;
 
 use crate::compiler_context::CompilerContext;
-use crate::diagnostics::{Diagnostic, DiagnosticCode, Label};
+use crate::diagnostics::{Diag, Diagnostic};
 use crate::source_map::{BytePos, Span};
 
 pub(crate) struct Scanner<'ctx> {
@@ -42,18 +42,14 @@ impl<'ctx> Scanner<'ctx> {
             '}' => TokenKind::Closed(Delim::Curly),
             'a'..='z' | 'A'..='Z' | '_' => self.scan_identifier(span_start),
             ch => {
-                return Err(Diagnostic {
-                    code: DiagnosticCode::E0005,
-                    message: format!("unknown character `{ch}`"),
-                    label: Some(Label {
-                        span: Span {
-                            start: span_start,
-                            end: self.current_peek_pos,
-                        },
-                        message: "unknown character".into(),
-                    }),
-                    helps: vec![],
-                });
+                let span = Span {
+                    start: span_start,
+                    end: self.current_peek_pos,
+                };
+
+                return Err(Diagnostic::builder(Diag::UnknownCharacter(ch))
+                    .label(span, "unknown character")
+                    .build());
             }
         };
 

@@ -1,6 +1,6 @@
 use crate::ast::*;
 use crate::compiler_context::CompilerContext;
-use crate::diagnostics::{Diagnostic, DiagnosticBag, DiagnosticCode, Label};
+use crate::diagnostics::{Diag, Diagnostic, DiagnosticBag};
 use crate::scanner::{Delim, Keyword, Scanner, Token, TokenKind};
 use crate::sema::Sema;
 
@@ -37,10 +37,9 @@ impl<'ctx> Parser<'ctx> {
     }
 
     fn parse_decl(&mut self) -> Result<Decl<'ctx>, DiagnosticBag> {
-        let ident_tok =
-            self.expect_and_consume_tok(TokenKind::Identifier, DiagnosticCode::E0002)?;
+        let ident_tok = self.expect_and_consume_tok(TokenKind::Identifier)?;
 
-        self.expect_and_consume_tok(TokenKind::ColonColon, DiagnosticCode::E0003)?;
+        self.expect_and_consume_tok(TokenKind::ColonColon)?;
 
         let expr = self.parse_statement_expr()?;
 
@@ -60,8 +59,9 @@ impl<'ctx> Parser<'ctx> {
         match tok.kind {
             TokenKind::Keyword(Keyword::Return) => self.parse_return_expr(),
             TokenKind::Open(Delim::Paren) => self.parse_function(),
-            _ => Err(self
-                .make_expected_diagnostic(DiagnosticCode::E0004, "expression", tok)
+            found => Err(Diagnostic::builder(Diag::ExpectedExpression { found })
+                .label(tok.span, "expected expression")
+                .build()
                 .into()),
         }
     }
@@ -117,40 +117,18 @@ impl<'ctx> Parser<'ctx> {
         })
     }
 
-    fn make_expected_diagnostic(
-        &self,
-        code: DiagnosticCode,
-        expected: &str,
-        found_tok: Token,
-    ) -> Diagnostic {
-        let found = match found_tok.kind {
-            TokenKind::Eof => found_tok.kind.to_string(),
-            _ => format!(
-                "`{}`",
-                self.ctx.get_source_map().get_text_snippet(found_tok.span)
-            ),
-        };
-
-        Diagnostic {
-            code,
-            message: format!("expected {expected}, found {found}"),
-            label: Some(Label {
-                span: found_tok.span,
-                message: format!("expected {expected}"),
-            }),
-            helps: vec![],
-        }
-    }
-
-    fn expect_and_consume_tok(
-        &mut self,
-        kind: TokenKind,
-        code: DiagnosticCode,
-    ) -> Result<Token, Diagnostic> {
+    fn expect_and_consume_tok(&mut self, kind: TokenKind) -> Result<Token, Diagnostic> {
         let tok = self.peek_tok()?;
 
         if tok.kind != kind {
-            return Err(self.make_expected_diagnostic(code, &kind.to_string(), tok));
+            let diag = Diag::ExpectedButFound {
+                expected: kind,
+                found: tok.kind,
+            };
+
+            return Err(Diagnostic::builder(diag)
+                .label(tok.span, format!("expected {kind}"))
+                .build());
         }
 
         self.consume_tok()
