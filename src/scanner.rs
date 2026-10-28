@@ -91,7 +91,7 @@ impl<'ctx> Scanner<'ctx> {
     }
 
     fn scan_numeric_constant(&mut self) -> TokenKind {
-        while self.peek().is_ascii_digit() {
+        while matches!(self.peek(), 'a'..='z' | 'A'..='Z' | '_' | '0'..='9') {
             self.bump();
         }
 

@@ -15,7 +15,9 @@ pub(crate) struct IntegerConst {
 }
 
 pub(crate) fn parse_numeric_constant(token_lexeme: &str) -> ParseResult {
-    let (value, has_overflowed) = eval_integer_constant(token_lexeme.as_bytes());
+    let attrs = parse_num_const_attributes(token_lexeme);
+
+    let (value, has_overflowed) = eval_integer_constant(attrs);
 
     ParseResult {
         num_const: NumConst::Int(IntegerConst { value }),
@@ -23,19 +25,40 @@ pub(crate) fn parse_numeric_constant(token_lexeme: &str) -> ParseResult {
     }
 }
 
-fn eval_integer_constant(digits: &[u8]) -> (u64, bool) {
+struct NumConstAttrs<'a> {
+    radix: u64,
+    digits: &'a [u8],
+}
+
+fn parse_num_const_attributes(token_lexeme: &str) -> NumConstAttrs<'_> {
+    match token_lexeme.as_bytes() {
+        [b'0', b'x', digits @ ..] => NumConstAttrs { radix: 16, digits },
+        digits => NumConstAttrs { radix: 10, digits },
+    }
+}
+
+fn eval_integer_constant(attrs: NumConstAttrs) -> (u64, bool) {
     let mut value = 0u64;
     let mut has_overflowed = false;
 
-    for &digit in digits {
-        let (low_mul, overflowed) = value.overflowing_mul(10);
+    for &digit in attrs.digits {
+        let (low_mul, overflowed) = value.overflowing_mul(attrs.radix);
         has_overflowed |= overflowed;
         value = low_mul;
 
-        let (low_add, overflowed) = value.overflowing_add((digit - b'0') as u64);
+        let (low_add, overflowed) = value.overflowing_add(convert_digit_to_int(digit));
         has_overflowed |= overflowed;
         value = low_add;
     }
 
     (value, has_overflowed)
+}
+
+fn convert_digit_to_int(digit: u8) -> u64 {
+    match digit {
+        b'0'..=b'9' => (digit - b'0') as u64,
+        b'a'..=b'f' => (digit - b'a') as u64 + 10,
+        b'A'..=b'F' => (digit - b'A') as u64 + 10,
+        _ => unreachable!("should not convert '{}'", digit),
+    }
 }

@@ -2,6 +2,7 @@ use crate::driver;
 
 mod test_bindings;
 mod test_lexing;
+mod test_literals;
 mod test_main;
 
 fn compile(source_code: &str) -> Result<String, String> {
