@@ -107,3 +107,28 @@ fn test_read_unknown_binding() {
         |"#,
     );
 }
+
+#[test]
+fn test_shadowed_binding() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 10;
+        |    x := x;
+        |    y := x;
+        |}
+        |"#,
+    );
+
+    check(
+        program,
+        r#"
+        |fn @main () frame s:3 h:0
+        |    ldi.i32 s0, 10
+        |    mov s1, s0
+        |    mov s2, s1
+        |    ret
+        |end
+        |"#,
+    );
+}
