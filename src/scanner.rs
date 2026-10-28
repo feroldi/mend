@@ -1,35 +1,30 @@
 use std::fmt;
-use std::iter::Peekable;
-use std::str::Chars;
 
+use crate::char_stream::CharStream;
 use crate::compiler_context::CompilerContext;
 use crate::diagnostics::{Diag, Diagnostic};
 use crate::source_map::{BytePos, Span};
 
 pub(crate) struct Scanner<'ctx> {
     ctx: &'ctx CompilerContext,
-    char_stream: Peekable<Chars<'ctx>>,
-    current_peek_pos: BytePos,
+    char_stream: CharStream<'ctx>,
 }
 
 impl<'ctx> Scanner<'ctx> {
-    const EOF_CHAR: char = '\0';
-
     pub(crate) fn new(ctx: &'ctx CompilerContext) -> Scanner<'ctx> {
         Scanner {
             ctx,
-            char_stream: ctx.get_source_map().get_text().chars().peekable(),
-            current_peek_pos: BytePos(0),
+            char_stream: CharStream::with_text(ctx.get_source_map().get_text()),
         }
     }
 
     pub(crate) fn scan_next_token(&mut self) -> Result<Token, Diagnostic> {
         self.skip_whitespace();
 
-        let span_start = self.current_peek_pos;
+        let span_start = self.char_stream.peek_byte_pos();
 
         let token_kind = match self.bump() {
-            Scanner::EOF_CHAR => TokenKind::Eof,
+            CharStream::EOF_CHAR => TokenKind::Eof,
             ';' => TokenKind::Semi,
             ':' if self.peek() == ':' => {
                 self.bump();
@@ -44,7 +39,7 @@ impl<'ctx> Scanner<'ctx> {
             ch => {
                 let span = Span {
                     start: span_start,
-                    end: self.current_peek_pos,
+                    end: self.char_stream.peek_byte_pos(),
                 };
 
                 return Err(Diagnostic::builder(Diag::UnknownCharacter(ch))
@@ -55,7 +50,7 @@ impl<'ctx> Scanner<'ctx> {
 
         let token_span = Span {
             start: span_start,
-            end: self.current_peek_pos,
+            end: self.char_stream.peek_byte_pos(),
         };
 
         Ok(Token {
@@ -77,7 +72,7 @@ impl<'ctx> Scanner<'ctx> {
 
         let ident_text = self.ctx.get_source_map().get_text_snippet(Span {
             start: ident_span_start,
-            end: self.current_peek_pos,
+            end: self.char_stream.peek_byte_pos(),
         });
 
         match ident_text {
@@ -87,21 +82,11 @@ impl<'ctx> Scanner<'ctx> {
     }
 
     fn peek(&mut self) -> char {
-        self.char_stream
-            .peek()
-            .cloned()
-            .unwrap_or(Scanner::EOF_CHAR)
+        self.char_stream.peek()
     }
 
     fn bump(&mut self) -> char {
-        let peeked = self.peek();
-
-        if peeked != Scanner::EOF_CHAR {
-            self.current_peek_pos = BytePos(self.current_peek_pos.0 + peeked.len_utf8());
-            self.char_stream.next();
-        }
-
-        peeked
+        self.char_stream.consume()
     }
 }
 

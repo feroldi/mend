@@ -1,3 +1,5 @@
+use std::ops::{Add, AddAssign};
+
 pub(crate) struct SourceMap {
     source_name: String,
     source_text: String,
@@ -57,4 +59,28 @@ pub(crate) struct Span {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct BytePos(pub(crate) usize);
+pub(crate) struct BytePos(usize);
+
+impl BytePos {
+    pub(crate) fn from_usize(value: usize) -> BytePos {
+        BytePos(value)
+    }
+
+    pub(crate) fn to_usize(self) -> usize {
+        self.0
+    }
+}
+
+impl Add for BytePos {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self {
+        Self::from_usize(self.to_usize() + rhs.to_usize())
+    }
+}
+
+impl AddAssign for BytePos {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs
+    }
+}

@@ -1,4 +1,5 @@
 mod ast;
+mod char_stream;
 mod codegen;
 mod compiler_context;
 mod diagnostics;
