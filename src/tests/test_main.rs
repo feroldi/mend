@@ -196,3 +196,29 @@ fn test_function_without_body() {
         |"#,
     );
 }
+
+#[test]
+fn test_multiple_functions() {
+    let program = compile(
+        r#"
+        |foo :: () {}
+        |main :: () {}
+        |bar :: () {}
+        |"#,
+    );
+
+    check(
+        program,
+        r#"
+        |fn @foo () frame s:0 h:0
+        |    ret
+        |end
+        |fn @main () frame s:0 h:0
+        |    ret
+        |end
+        |fn @bar () frame s:0 h:0
+        |    ret
+        |end
+        |"#,
+    );
+}
