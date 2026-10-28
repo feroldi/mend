@@ -149,7 +149,7 @@ Examples of such passes:
 Once a functionality is implemented, tick off the item in the list below.
 
 - [x] Program skeleton and `main`
-- [ ] Bindings
+- [x] Bindings
 - [ ] Literals and lexing
 - [ ] Constants
 - [ ] Type inference and coercion
