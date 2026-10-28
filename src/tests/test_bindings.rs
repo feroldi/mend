@@ -1,4 +1,4 @@
-use crate::tests::{check, compile};
+use crate::tests::{check, check_fail, compile};
 
 #[test]
 fn test_immutable_binding() {
@@ -59,6 +59,51 @@ fn test_mutable_binding() {
         |    ldi.i32 s0, 10
         |    ret
         |end
+        |"#,
+    );
+}
+
+#[test]
+fn test_read_binding_by_value() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 10;
+        |    y := x;
+        |}
+        |"#,
+    );
+
+    check(
+        program,
+        r#"
+        |fn @main () frame s:2 h:0
+        |    ldi.i32 s0, 10
+        |    mov s1, s0
+        |    ret
+        |end
+        |"#,
+    );
+}
+
+#[test]
+fn test_read_unknown_binding() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    y := z;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0006]: cannot find binding `z` in this scope
+        | --> <source>:2:10
+        |  |
+        |2 |     y := z;
+        |  |          ^ not found in this scope
         |"#,
     );
 }

@@ -60,7 +60,7 @@ impl<'ctx> Parser<'ctx> {
 
         match tok.kind {
             TokenKind::NumericConstant => self.parse_numeric_constant(tok),
-            TokenKind::Identifier => self.parse_bind_def_expr(tok, false),
+            TokenKind::Identifier => self.parse_identifier_expr(tok),
             TokenKind::Keyword(Keyword::Mut) => self.parse_mut_bind_def_expr(),
             TokenKind::Keyword(Keyword::Return) => self.parse_return_expr(),
             TokenKind::Open(Delim::Paren) => self.parse_function(),
@@ -91,6 +91,22 @@ impl<'ctx> Parser<'ctx> {
         }
     }
 
+    fn parse_identifier_expr(&mut self, ident_tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
+        if matches!(
+            self.peek_tok()?.kind,
+            TokenKind::Colon | TokenKind::ColonEqual
+        ) {
+            return self.parse_bind_def_expr(ident_tok, false);
+        }
+
+        let identifier = self
+            .ctx
+            .get_or_intern_str(self.ctx.get_source_map().get_text_snippet(ident_tok.span));
+
+        self.sema
+            .act_on_bind_ref(BindRef { identifier }, ident_tok.span)
+    }
+
     fn parse_mut_bind_def_expr(&mut self) -> Result<Expr<'ctx>, DiagnosticBag> {
         let ident_tok = self.expect_and_consume_tok(TokenKind::Identifier)?;
 
@@ -119,7 +135,7 @@ impl<'ctx> Parser<'ctx> {
             .ctx
             .get_or_intern_str(self.ctx.get_source_map().get_text_snippet(ident_tok.span));
 
-        Ok(Expr::BindDef(BindDef {
+        Ok(self.sema.act_on_bind_def(BindDef {
             identifier,
             is_mutable,
             ty,
@@ -160,10 +176,14 @@ impl<'ctx> Parser<'ctx> {
 
         let mut exprs = vec![];
 
+        self.sema.enter_scope();
+
         while self.peek_tok()?.kind != TokenKind::Closed(Delim::Curly) {
             let expr = self.parse_expr()?;
             exprs.push(expr);
         }
+
+        self.sema.exit_scope();
 
         let closed_curly_tok = self.consume_tok()?;
         debug_assert_eq!(closed_curly_tok.kind, TokenKind::Closed(Delim::Curly));

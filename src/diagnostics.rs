@@ -1,7 +1,7 @@
-use std::fmt;
-
+use crate::compiler_context::CompilerContext;
+use crate::interner::Symbol;
 use crate::scanner::TokenKind;
-use crate::source_map::{SourceMap, Span};
+use crate::source_map::Span;
 
 #[derive(Default)]
 pub(crate) struct DiagnosticBag {
@@ -44,6 +44,9 @@ impl From<Diagnostic> for DiagnosticBag {
 pub(crate) enum Diag {
     MainNotFound,
     MainDeclaredTwice,
+    BindingNotFound {
+        ident: Symbol,
+    },
     ExpectedButFound {
         expected: TokenKind,
         found: TokenKind,
@@ -62,20 +65,23 @@ impl Diag {
             Diag::ExpectedExpression { .. } => "E0003",
             Diag::UnknownCharacter(_) => "E0004",
             Diag::MainDeclaredTwice => "E0005",
+            Diag::BindingNotFound { .. } => "E0006",
         }
     }
-}
 
-impl fmt::Display for Diag {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    pub(crate) fn message(&self, ctx: &CompilerContext) -> String {
         match self {
-            Diag::MainNotFound => write!(f, "`main` function not found"),
-            Diag::MainDeclaredTwice => write!(f, "`main` is declared more than once"),
+            Diag::MainNotFound => "`main` function not found".into(),
+            Diag::MainDeclaredTwice => "`main` is declared more than once".into(),
+            Diag::BindingNotFound { ident } => format!(
+                "cannot find binding `{}` in this scope",
+                ctx.resolve_symbol(*ident)
+            ),
             Diag::ExpectedButFound { expected, found } => {
-                write!(f, "expected {expected}, found {found}")
+                format!("expected {expected}, found {found}")
             }
-            Diag::ExpectedExpression { found } => write!(f, "expected expression, found {found}"),
-            Diag::UnknownCharacter(ch) => write!(f, "unknown character `{ch}`"),
+            Diag::ExpectedExpression { found } => format!("expected expression, found {found}"),
+            Diag::UnknownCharacter(ch) => format!("unknown character `{ch}`"),
         }
     }
 }
@@ -134,14 +140,14 @@ pub(crate) trait DiagnosticEmitter {
 
 /// Formats diagnostics for the end user, in the rustc layout.
 pub(crate) struct HumanEmitter<'a> {
-    source_map: &'a SourceMap,
+    ctx: &'a CompilerContext,
     output: String,
 }
 
 impl<'a> HumanEmitter<'a> {
-    pub(crate) fn new(source_map: &'a SourceMap) -> HumanEmitter<'a> {
+    pub(crate) fn new(ctx: &'a CompilerContext) -> HumanEmitter<'a> {
         HumanEmitter {
-            source_map,
+            ctx,
             output: String::new(),
         }
     }
@@ -153,13 +159,17 @@ impl<'a> HumanEmitter<'a> {
 
 impl DiagnosticEmitter for HumanEmitter<'_> {
     fn emit(&mut self, diagnostic: &Diagnostic) {
-        let source_map = self.source_map;
+        let source_map = self.ctx.get_source_map();
 
         if !self.output.is_empty() {
             self.output += "\n";
         }
 
-        self.output += &format!("error[{}]: {}\n", diagnostic.diag.code(), diagnostic.diag);
+        self.output += &format!(
+            "error[{}]: {}\n",
+            diagnostic.diag.code(),
+            diagnostic.diag.message(self.ctx)
+        );
 
         let gutter = match &diagnostic.label {
             Some(label) => {

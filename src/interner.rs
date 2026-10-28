@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use bumpalo::Bump;
 
-#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub(crate) struct Symbol(usize);
 
 #[derive(Default)]

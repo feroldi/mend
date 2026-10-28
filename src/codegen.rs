@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use std::fmt;
 
-use crate::ast::{BindDef, CompoundExpr, Const, Decl, Expr, Function, Program, Type};
+use crate::ast::{BindDef, BindRef, CompoundExpr, Const, Decl, Expr, Function, Program, Type};
 use crate::compiler_context::CompilerContext;
 use crate::interner::Symbol;
 
@@ -8,6 +9,7 @@ pub(crate) struct CodeGen<'ctx> {
     ctx: &'ctx CompilerContext,
     emitted_insts: Vec<Inst>,
     scalar_frame_size: usize,
+    reg_by_binding: HashMap<Symbol, ScalarReg>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -16,6 +18,7 @@ impl<'ctx> CodeGen<'ctx> {
             ctx,
             emitted_insts: vec![],
             scalar_frame_size: 0,
+            reg_by_binding: HashMap::new(),
         }
     }
 
@@ -41,6 +44,7 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn gen_function(&mut self, name: Symbol, body: CompoundExpr) -> MbcFunction {
         self.scalar_frame_size = 0;
+        self.reg_by_binding.clear();
 
         for expr in body.exprs {
             self.gen_expr(expr);
@@ -63,13 +67,14 @@ impl<'ctx> CodeGen<'ctx> {
             Expr::Semi(expr) => self.gen_expr(expr),
             Expr::Return => self.gen_return_expr(),
             Expr::BindDef(bind_def) => self.gen_bind_def_expr(*bind_def),
-            Expr::Const(_) | Expr::Function(_) => unimplemented!(),
+            Expr::Const(_) | Expr::BindRef(_) | Expr::Function(_) => unimplemented!(),
         }
     }
 
     fn gen_expr_to_reg(&mut self, expr: &Expr, ty: ScalarType, dest: ScalarReg) {
         match expr {
             Expr::Const(constant) => self.gen_constant_expr(*constant, ty, dest),
+            Expr::BindRef(bind_ref) => self.gen_bind_ref_expr(*bind_ref, dest),
             _ => unimplemented!(),
         }
     }
@@ -92,7 +97,15 @@ impl<'ctx> CodeGen<'ctx> {
             None => ScalarType::I32,
         };
 
-        self.gen_expr_to_reg(bind_def.value, ty, dest)
+        self.gen_expr_to_reg(bind_def.value, ty, dest);
+
+        self.reg_by_binding.insert(bind_def.identifier, dest);
+    }
+
+    fn gen_bind_ref_expr(&mut self, bind_ref: BindRef, dest: ScalarReg) {
+        let source = self.reg_by_binding[&bind_ref.identifier];
+
+        self.emit(Inst::Mov { dest, source });
     }
 
     fn alloc_scalar_reg(&mut self) -> ScalarReg {
@@ -129,6 +142,10 @@ enum Inst {
         ty: ScalarType,
         dest: ScalarReg,
         imm: i32,
+    },
+    Mov {
+        dest: ScalarReg,
+        source: ScalarReg,
     },
     Ret,
 }
@@ -170,6 +187,7 @@ impl fmt::Display for Inst {
             Inst::Ldi { ty, dest, imm } => {
                 write!(f, "ldi.{ty} {dest}, {imm}")
             }
+            Inst::Mov { dest, source } => write!(f, "mov {dest}, {source}"),
             Inst::Ret => write!(f, "ret"),
         }
     }

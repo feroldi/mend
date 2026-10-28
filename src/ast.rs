@@ -16,6 +16,7 @@ pub(crate) struct Decl<'ctx> {
 #[derive(Clone, Copy)]
 pub(crate) enum Expr<'ctx> {
     Const(Const),
+    BindRef(BindRef),
     BindDef(BindDef<'ctx>),
     Function(Function<'ctx>),
     Return,
@@ -25,6 +26,11 @@ pub(crate) enum Expr<'ctx> {
 #[derive(Clone, Copy)]
 pub(crate) enum Const {
     Integer { value: u64 },
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BindRef {
+    pub(crate) identifier: Symbol,
 }
 
 #[derive(Clone, Copy)]

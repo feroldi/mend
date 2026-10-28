@@ -363,6 +363,10 @@ mut n := 0usize;
 
 - A binding is immutable unless it is declared `mut`. Only a `mut` binding can
   be assigned (`=`, `+=`, …) or changed in place (`s.push(x)`).
+- Reading a binding by name yields a copy of its value. A later change to
+  either binding, by assignment or in place, does not affect the other. This
+  holds for every type, `str`, `[T]` and function values included; Mend has
+  no references.
 - Shadowing is allowed.
 - A `mut` parameter (`(mut n: u32)`) is a mutable local copy of the argument.
 - The content itself is always writable, through views, typed access and

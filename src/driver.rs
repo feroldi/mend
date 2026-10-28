@@ -12,7 +12,7 @@ pub(crate) fn compile(source_code: &str) -> Result<String, String> {
     let scanner = Scanner::new(&context);
     let mut parser = Parser::new(scanner, &context);
     let program = parser.parse_program().map_err(|diagnostics| {
-        let mut emitter = HumanEmitter::new(context.get_source_map());
+        let mut emitter = HumanEmitter::new(&context);
         diagnostics.emit(&mut emitter);
 
         emitter.into_output()
