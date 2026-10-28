@@ -253,3 +253,30 @@ fn test_assign_to_unknown_binding() {
         |"#,
     );
 }
+
+#[test]
+fn test_assign_to_copied_binding() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 10;
+        |    mut y := x;
+        |    y = 20;
+        |    z := x;
+        |}
+        |"#,
+    );
+
+    check(
+        program,
+        r#"
+        |fn @main () frame s:3 h:0
+        |    ldi.i32 s0, 10
+        |    mov s1, s0
+        |    ldi.i32 s1, 20
+        |    mov s2, s0
+        |    ret
+        |end
+        |"#,
+    );
+}
