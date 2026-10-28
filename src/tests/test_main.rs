@@ -176,3 +176,23 @@ fn test_function_without_closing_paren() {
         |"#,
     );
 }
+
+#[test]
+fn test_function_without_body() {
+    let program = compile(
+        r#"
+        |main :: () return;
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0002]: expected `{`, found `return`
+        | --> <source>:1:12
+        |  |
+        |1 | main :: () return;
+        |  |            ^^^^^^ expected `{`
+        |"#,
+    );
+}
