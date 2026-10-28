@@ -207,3 +207,49 @@ fn test_assign_to_mutable_binding() {
         |"#,
     );
 }
+
+#[test]
+fn test_assign_to_immutable_binding() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 10;
+        |    x = 20;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0007]: cannot assign to immutable binding `x`
+        | --> <source>:3:5
+        |  |
+        |3 |     x = 20;
+        |  |     ^ cannot assign
+        |  = help: declare the binding as `mut x`
+        |"#,
+    );
+}
+
+#[test]
+fn test_assign_to_unknown_binding() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    z = 20;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0006]: cannot find binding `z` in this scope
+        | --> <source>:2:5
+        |  |
+        |2 |     z = 20;
+        |  |     ^ not found in this scope
+        |"#,
+    );
+}

@@ -47,6 +47,9 @@ pub(crate) enum Diag {
     BindingNotFound {
         ident: Symbol,
     },
+    AssignToImmutableBinding {
+        ident: Symbol,
+    },
     ExpectedButFound {
         expected: TokenKind,
         found: TokenKind,
@@ -66,6 +69,7 @@ impl Diag {
             Diag::UnknownCharacter(_) => "E0004",
             Diag::MainDeclaredTwice => "E0005",
             Diag::BindingNotFound { .. } => "E0006",
+            Diag::AssignToImmutableBinding { .. } => "E0007",
         }
     }
 
@@ -75,6 +79,10 @@ impl Diag {
             Diag::MainDeclaredTwice => "`main` is declared more than once".into(),
             Diag::BindingNotFound { ident } => format!(
                 "cannot find binding `{}` in this scope",
+                ctx.resolve_symbol(*ident)
+            ),
+            Diag::AssignToImmutableBinding { ident } => format!(
+                "cannot assign to immutable binding `{}`",
                 ctx.resolve_symbol(*ident)
             ),
             Diag::ExpectedButFound { expected, found } => {

@@ -119,10 +119,13 @@ impl<'ctx> Parser<'ctx> {
             .ctx
             .get_or_intern_str(self.ctx.get_source_map().get_text_snippet(ident_tok.span));
 
-        Ok(Expr::Assign(AssignExpr {
-            identifier,
-            value: self.ctx.alloc_expr(value),
-        }))
+        self.sema.act_on_assign(
+            AssignExpr {
+                identifier,
+                value: self.ctx.alloc_expr(value),
+            },
+            ident_tok.span,
+        )
     }
 
     fn parse_mut_bind_def_expr(&mut self) -> Result<Expr<'ctx>, DiagnosticBag> {
