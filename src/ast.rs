@@ -14,6 +14,8 @@ pub(crate) struct Decl<'ctx> {
 #[derive(Clone, Copy)]
 pub(crate) enum Expr<'ctx> {
     Function(Function<'ctx>),
+    Return,
+    Semi(&'ctx Expr<'ctx>),
 }
 
 #[derive(Clone, Copy)]

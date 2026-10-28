@@ -29,13 +29,16 @@ impl<'ctx> CodeGen<'ctx> {
     fn gen_decl(&mut self, decl: &Decl) -> MbcFunction {
         match decl.value {
             Expr::Function(Function { body }) => self.gen_function(decl.identifier, *body),
+            _ => todo!("other top-level exprs"),
         }
     }
 
     fn gen_function(&mut self, name: Symbol, body: CompoundExpr) -> MbcFunction {
         let mut insts: Vec<Inst> = body.exprs.iter().flat_map(|e| self.gen_expr(e)).collect();
 
-        insts.push(Inst::Ret);
+        if !matches!(insts.last(), Some(Inst::Ret)) {
+            insts.push(Inst::Ret);
+        }
 
         MbcFunction {
             name,
@@ -47,8 +50,14 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn gen_expr(&mut self, expr: &Expr) -> Vec<Inst> {
         match expr {
+            Expr::Semi(expr) => self.gen_expr(expr),
+            Expr::Return => self.gen_return_expr(),
             Expr::Function(_) => unimplemented!(),
         }
+    }
+
+    fn gen_return_expr(&mut self) -> Vec<Inst> {
+        vec![Inst::Ret]
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::ast::*;
 use crate::compiler_context::CompilerContext;
-use crate::scanner::{Delim, Token, TokenKind};
+use crate::scanner::{Delim, Keyword, Token, TokenKind};
 
 pub(crate) struct Parser<'ctx> {
     ctx: &'ctx CompilerContext,
@@ -38,7 +38,7 @@ impl<'ctx> Parser<'ctx> {
         let op = self.consume()?;
         debug_assert_eq!(op.kind, TokenKind::ColonColon);
 
-        let expr = self.parse_expr()?;
+        let expr = self.parse_statement_expr()?;
 
         let identifier = self.ctx.get_or_intern_str(
             &self.ctx.get_source_code()[ident_tok.span.start.0..ident_tok.span.end.0],
@@ -50,13 +50,30 @@ impl<'ctx> Parser<'ctx> {
         })
     }
 
-    fn parse_expr(&mut self) -> Option<Expr<'ctx>> {
+    fn parse_statement_expr(&mut self) -> Option<Expr<'ctx>> {
         let tok = self.consume()?;
 
         match tok.kind {
+            TokenKind::Keyword(Keyword::Return) => self.parse_return_expr(),
             TokenKind::Open(Delim::Paren) => self.parse_function(),
             _ => None,
         }
+    }
+
+    fn parse_expr(&mut self) -> Option<Expr<'ctx>> {
+        let stmt_expr = self.parse_statement_expr()?;
+
+        if self.peek()?.kind == TokenKind::Semi {
+            self.consume()?;
+
+            Some(Expr::Semi(self.ctx.alloc_expr(stmt_expr)))
+        } else {
+            Some(stmt_expr)
+        }
+    }
+
+    fn parse_return_expr(&mut self) -> Option<Expr<'ctx>> {
+        Some(Expr::Return)
     }
 
     fn parse_function(&mut self) -> Option<Expr<'ctx>> {

@@ -4,6 +4,7 @@ use std::str::Chars;
 use crate::compiler_context::CompilerContext;
 
 pub(crate) struct Scanner<'ctx> {
+    ctx: &'ctx CompilerContext,
     char_stream: Peekable<Chars<'ctx>>,
     current_peek_pos: BytePos,
 }
@@ -13,6 +14,7 @@ impl<'ctx> Scanner<'ctx> {
 
     pub(crate) fn new(ctx: &'ctx CompilerContext) -> Scanner<'ctx> {
         Scanner {
+            ctx,
             char_stream: ctx.get_source_code().chars().peekable(),
             current_peek_pos: BytePos(0),
         }
@@ -35,6 +37,7 @@ impl<'ctx> Scanner<'ctx> {
 
         let token_kind = match self.bump() {
             Scanner::EOF_CHAR => return None,
+            ';' => TokenKind::Semi,
             ':' if self.peek() == ':' => {
                 self.bump();
 
@@ -44,7 +47,7 @@ impl<'ctx> Scanner<'ctx> {
             ')' => TokenKind::Closed(Delim::Paren),
             '{' => TokenKind::Open(Delim::Curly),
             '}' => TokenKind::Closed(Delim::Curly),
-            'a'..='z' | 'A'..='Z' | '_' => self.scan_identifier(),
+            'a'..='z' | 'A'..='Z' | '_' => self.scan_identifier(span_start),
             ch => todo!("char not recognized: '{}'", ch),
         };
 
@@ -65,12 +68,17 @@ impl<'ctx> Scanner<'ctx> {
         }
     }
 
-    fn scan_identifier(&mut self) -> TokenKind {
+    fn scan_identifier(&mut self, ident_span_start: BytePos) -> TokenKind {
         while matches!(self.peek(), 'a'..='z' | 'A'..='Z' | '_' | '0'..='9') {
             self.bump();
         }
 
-        TokenKind::Identifier
+        let ident_text = &self.ctx.get_source_code()[ident_span_start.0..self.current_peek_pos.0];
+
+        match ident_text {
+            "return" => TokenKind::Keyword(Keyword::Return),
+            _ => TokenKind::Identifier,
+        }
     }
 
     fn peek(&mut self) -> char {
@@ -102,8 +110,15 @@ pub(crate) struct Token {
 pub(crate) enum TokenKind {
     Identifier,
     ColonColon,
+    Semi,
+    Keyword(Keyword),
     Open(Delim),
     Closed(Delim),
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub(crate) enum Keyword {
+    Return,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
