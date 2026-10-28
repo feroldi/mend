@@ -19,6 +19,7 @@ pub(crate) enum Expr<'ctx> {
     BindRef(BindRef),
     BindDef(BindDef<'ctx>),
     Function(Function<'ctx>),
+    Compound(CompoundExpr<'ctx>),
     Return,
     Semi(&'ctx Expr<'ctx>),
 }

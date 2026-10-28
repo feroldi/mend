@@ -64,6 +64,7 @@ impl<'ctx> Parser<'ctx> {
             TokenKind::Keyword(Keyword::Mut) => self.parse_mut_bind_def_expr(),
             TokenKind::Keyword(Keyword::Return) => self.parse_return_expr(),
             TokenKind::Open(Delim::Paren) => self.parse_function(),
+            TokenKind::Open(Delim::Curly) => self.parse_compound_expr(tok).map(Expr::Compound),
             found => Err(Diagnostic::builder(Diag::ExpectedExpression { found })
                 .label(tok.span, "expected expression")
                 .build()

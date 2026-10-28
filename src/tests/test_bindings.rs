@@ -132,3 +132,30 @@ fn test_shadowed_binding() {
         |"#,
     );
 }
+
+#[test]
+fn test_shadowed_binding_inside_block() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 1;
+        |    {
+        |        x := 2;
+        |    }
+        |    y := x;
+        |}
+        |"#,
+    );
+
+    check(
+        program,
+        r#"
+        |fn @main () frame s:3 h:0
+        |    ldi.i32 s0, 1
+        |    ldi.i32 s1, 2
+        |    mov s2, s0
+        |    ret
+        |end
+        |"#,
+    );
+}

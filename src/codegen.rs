@@ -9,7 +9,7 @@ pub(crate) struct CodeGen<'ctx> {
     ctx: &'ctx CompilerContext,
     emitted_insts: Vec<Inst>,
     scalar_frame_size: usize,
-    reg_by_binding: HashMap<Symbol, ScalarReg>,
+    scope_stack: Vec<HashMap<Symbol, ScalarReg>>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -18,7 +18,7 @@ impl<'ctx> CodeGen<'ctx> {
             ctx,
             emitted_insts: vec![],
             scalar_frame_size: 0,
-            reg_by_binding: HashMap::new(),
+            scope_stack: vec![],
         }
     }
 
@@ -44,11 +44,8 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn gen_function(&mut self, name: Symbol, body: CompoundExpr) -> MbcFunction {
         self.scalar_frame_size = 0;
-        self.reg_by_binding.clear();
 
-        for expr in body.exprs {
-            self.gen_expr(expr);
-        }
+        self.gen_compound_expr(body);
 
         if !matches!(self.emitted_insts.last(), Some(Inst::Ret)) {
             self.emit(Inst::Ret);
@@ -67,6 +64,7 @@ impl<'ctx> CodeGen<'ctx> {
             Expr::Semi(expr) => self.gen_expr(expr),
             Expr::Return => self.gen_return_expr(),
             Expr::BindDef(bind_def) => self.gen_bind_def_expr(*bind_def),
+            Expr::Compound(compound_expr) => self.gen_compound_expr(*compound_expr),
             Expr::Const(_) | Expr::BindRef(_) | Expr::Function(_) => unimplemented!(),
         }
     }
@@ -99,13 +97,43 @@ impl<'ctx> CodeGen<'ctx> {
 
         self.gen_expr_to_reg(bind_def.value, ty, dest);
 
-        self.reg_by_binding.insert(bind_def.identifier, dest);
+        self.get_this_scope_mut().insert(bind_def.identifier, dest);
     }
 
     fn gen_bind_ref_expr(&mut self, bind_ref: BindRef, dest: ScalarReg) {
-        let source = self.reg_by_binding[&bind_ref.identifier];
+        let source = self.find_in_scope(bind_ref.identifier);
 
         self.emit(Inst::Mov { dest, source });
+    }
+
+    fn gen_compound_expr(&mut self, compound_expr: CompoundExpr) {
+        self.enter_scope();
+
+        for expr in compound_expr.exprs {
+            self.gen_expr(expr);
+        }
+
+        self.exit_scope();
+    }
+
+    fn enter_scope(&mut self) {
+        self.scope_stack.push(HashMap::new());
+    }
+
+    fn exit_scope(&mut self) {
+        self.scope_stack.pop();
+    }
+
+    fn get_this_scope_mut(&mut self) -> &mut HashMap<Symbol, ScalarReg> {
+        self.scope_stack.last_mut().unwrap()
+    }
+
+    fn find_in_scope(&self, identifier: Symbol) -> ScalarReg {
+        self.scope_stack
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(&identifier).copied())
+            .unwrap()
     }
 
     fn alloc_scalar_reg(&mut self) -> ScalarReg {
