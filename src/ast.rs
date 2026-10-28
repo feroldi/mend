@@ -30,7 +30,13 @@ pub(crate) enum Const {
 #[derive(Clone, Copy)]
 pub(crate) struct BindDef<'ctx> {
     pub(crate) identifier: Symbol,
+    pub(crate) ty: Option<Type>,
     pub(crate) value: &'ctx Expr<'ctx>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum Type {
+    U8,
 }
 
 #[derive(Clone, Copy)]

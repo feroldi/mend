@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::ast::{BindDef, CompoundExpr, Const, Decl, Expr, Function, Program};
+use crate::ast::{BindDef, CompoundExpr, Const, Decl, Expr, Function, Program, Type};
 use crate::compiler_context::CompilerContext;
 use crate::interner::Symbol;
 
@@ -63,17 +63,17 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn gen_expr_into(&mut self, expr: &Expr, dest: ScalarReg) -> Vec<Inst> {
+    fn gen_expr_into(&mut self, expr: &Expr, ty: ScalarType, dest: ScalarReg) -> Vec<Inst> {
         match expr {
-            Expr::Const(constant) => self.gen_constant_expr(*constant, dest),
+            Expr::Const(constant) => self.gen_constant_expr(*constant, ty, dest),
             _ => unimplemented!(),
         }
     }
 
-    fn gen_constant_expr(&mut self, constant: Const, dest: ScalarReg) -> Vec<Inst> {
+    fn gen_constant_expr(&mut self, constant: Const, ty: ScalarType, dest: ScalarReg) -> Vec<Inst> {
         match constant {
             Const::Integer { value } => vec![Inst::Ldi {
-                ty: ScalarType::I32,
+                ty,
                 dest,
                 imm: value as i32,
             }],
@@ -83,7 +83,12 @@ impl<'ctx> CodeGen<'ctx> {
     fn gen_bind_def_expr(&mut self, bind_def: BindDef) -> Vec<Inst> {
         let dest = self.alloc_scalar_reg();
 
-        self.gen_expr_into(bind_def.value, dest)
+        let ty = match bind_def.ty {
+            Some(Type::U8) => ScalarType::U8,
+            None => ScalarType::I32,
+        };
+
+        self.gen_expr_into(bind_def.value, ty, dest)
     }
 
     fn alloc_scalar_reg(&mut self) -> ScalarReg {
@@ -125,6 +130,7 @@ struct ScalarReg(usize);
 
 #[derive(Clone, Copy)]
 enum ScalarType {
+    U8,
     I32,
 }
 
@@ -154,21 +160,11 @@ impl fmt::Display for Inst {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Inst::Ldi { ty, dest, imm } => {
-                write_mnemonic(f, &format!("ldi.{ty}"))?;
-                write!(f, "{dest}, {imm}")
+                write!(f, "ldi.{ty} {dest}, {imm}")
             }
             Inst::Ret => write!(f, "ret"),
         }
     }
-}
-
-/// Pads the mnemonic so that the operands start at the next multiple of 4 columns.
-fn write_mnemonic(f: &mut fmt::Formatter<'_>, mnemonic: &str) -> fmt::Result {
-    const TAB_WIDTH: usize = 4;
-
-    let width = (mnemonic.len() / TAB_WIDTH + 1) * TAB_WIDTH;
-
-    write!(f, "{mnemonic:<width$}")
 }
 
 impl fmt::Display for ScalarReg {
@@ -180,6 +176,7 @@ impl fmt::Display for ScalarReg {
 impl fmt::Display for ScalarType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ScalarType::U8 => write!(f, "u8"),
             ScalarType::I32 => write!(f, "i32"),
         }
     }

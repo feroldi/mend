@@ -73,9 +73,7 @@ impl<'ctx> Parser<'ctx> {
     fn parse_expr(&mut self) -> Result<Expr<'ctx>, DiagnosticBag> {
         let stmt_expr = self.parse_statement_expr()?;
 
-        if self.peek_tok()?.kind == TokenKind::Semi {
-            self.consume_tok()?;
-
+        if self.try_consume_tok(TokenKind::Semi)? {
             Ok(Expr::Semi(self.ctx.alloc_expr(stmt_expr)))
         } else {
             Ok(stmt_expr)
@@ -93,7 +91,16 @@ impl<'ctx> Parser<'ctx> {
     }
 
     fn parse_bind_def_expr(&mut self, ident_tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
-        self.expect_and_consume_tok(TokenKind::ColonEqual)?;
+        let ty = if self.try_consume_tok(TokenKind::Colon)? {
+            let ty = self.parse_type()?;
+            self.expect_and_consume_tok(TokenKind::Equal)?;
+
+            Some(ty)
+        } else {
+            self.expect_and_consume_tok(TokenKind::ColonEqual)?;
+
+            None
+        };
 
         let value = self.parse_statement_expr()?;
 
@@ -103,8 +110,18 @@ impl<'ctx> Parser<'ctx> {
 
         Ok(Expr::BindDef(BindDef {
             identifier,
+            ty,
             value: self.ctx.alloc_expr(value),
         }))
+    }
+
+    fn parse_type(&mut self) -> Result<Type, DiagnosticBag> {
+        let ident_tok = self.expect_and_consume_tok(TokenKind::Identifier)?;
+
+        match self.ctx.get_source_map().get_text_snippet(ident_tok.span) {
+            "u8" => Ok(Type::U8),
+            _ => todo!("other types"),
+        }
     }
 
     fn parse_return_expr(&mut self) -> Result<Expr<'ctx>, DiagnosticBag> {
@@ -186,4 +203,15 @@ impl<'ctx> Parser<'ctx> {
             }
         }
     }
+
+    fn try_consume_tok(&mut self, kind: TokenKind) -> Result<bool, Diagnostic> {
+        if self.peek_tok()?.kind == kind {
+            self.consume_tok()?;
+
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
 }

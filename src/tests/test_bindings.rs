@@ -20,3 +20,24 @@ fn test_immutable_binding() {
         |"#,
     );
 }
+
+#[test]
+fn test_binding_with_type_annotation() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x: u8 = 10;
+        |}
+        |"#,
+    );
+
+    check(
+        program,
+        r#"
+        |fn @main () frame s:1 h:0
+        |    ldi.u8 s0, 10
+        |    ret
+        |end
+        |"#,
+    );
+}

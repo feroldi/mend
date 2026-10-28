@@ -36,6 +36,8 @@ impl<'ctx> Scanner<'ctx> {
 
                 TokenKind::ColonEqual
             }
+            ':' => TokenKind::Colon,
+            '=' => TokenKind::Equal,
             '(' => TokenKind::Open(Delim::Paren),
             ')' => TokenKind::Closed(Delim::Paren),
             '{' => TokenKind::Open(Delim::Curly),
@@ -115,8 +117,10 @@ pub(crate) enum TokenKind {
     Eof,
     Identifier,
     NumericConstant,
+    Colon,
     ColonColon,
     ColonEqual,
+    Equal,
     Semi,
     Keyword(Keyword),
     Open(Delim),
@@ -140,8 +144,10 @@ impl fmt::Display for TokenKind {
             TokenKind::Eof => write!(f, "end of file"),
             TokenKind::Identifier => write!(f, "identifier"),
             TokenKind::NumericConstant => write!(f, "numeric constant"),
+            TokenKind::Colon => write!(f, "`:`"),
             TokenKind::ColonColon => write!(f, "`::`"),
             TokenKind::ColonEqual => write!(f, "`:=`"),
+            TokenKind::Equal => write!(f, "`=`"),
             TokenKind::Semi => write!(f, "`;`"),
             TokenKind::Keyword(Keyword::Return) => write!(f, "`return`"),
             TokenKind::Open(Delim::Paren) => write!(f, "`(`"),
