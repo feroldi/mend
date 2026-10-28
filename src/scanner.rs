@@ -84,6 +84,7 @@ impl<'ctx> Scanner<'ctx> {
         });
 
         match ident_text {
+            "mut" => TokenKind::Keyword(Keyword::Mut),
             "return" => TokenKind::Keyword(Keyword::Return),
             _ => TokenKind::Identifier,
         }
@@ -129,6 +130,7 @@ pub(crate) enum TokenKind {
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub(crate) enum Keyword {
+    Mut,
     Return,
 }
 
@@ -149,6 +151,7 @@ impl fmt::Display for TokenKind {
             TokenKind::ColonEqual => write!(f, "`:=`"),
             TokenKind::Equal => write!(f, "`=`"),
             TokenKind::Semi => write!(f, "`;`"),
+            TokenKind::Keyword(Keyword::Mut) => write!(f, "`mut`"),
             TokenKind::Keyword(Keyword::Return) => write!(f, "`return`"),
             TokenKind::Open(Delim::Paren) => write!(f, "`(`"),
             TokenKind::Closed(Delim::Paren) => write!(f, "`)`"),

@@ -60,7 +60,8 @@ impl<'ctx> Parser<'ctx> {
 
         match tok.kind {
             TokenKind::NumericConstant => self.parse_numeric_constant(tok),
-            TokenKind::Identifier => self.parse_bind_def_expr(tok),
+            TokenKind::Identifier => self.parse_bind_def_expr(tok, false),
+            TokenKind::Keyword(Keyword::Mut) => self.parse_mut_bind_def_expr(),
             TokenKind::Keyword(Keyword::Return) => self.parse_return_expr(),
             TokenKind::Open(Delim::Paren) => self.parse_function(),
             found => Err(Diagnostic::builder(Diag::ExpectedExpression { found })
@@ -90,7 +91,17 @@ impl<'ctx> Parser<'ctx> {
         }
     }
 
-    fn parse_bind_def_expr(&mut self, ident_tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
+    fn parse_mut_bind_def_expr(&mut self) -> Result<Expr<'ctx>, DiagnosticBag> {
+        let ident_tok = self.expect_and_consume_tok(TokenKind::Identifier)?;
+
+        self.parse_bind_def_expr(ident_tok, true)
+    }
+
+    fn parse_bind_def_expr(
+        &mut self,
+        ident_tok: Token,
+        is_mutable: bool,
+    ) -> Result<Expr<'ctx>, DiagnosticBag> {
         let ty = if self.try_consume_tok(TokenKind::Colon)? {
             let ty = self.parse_type()?;
             self.expect_and_consume_tok(TokenKind::Equal)?;
@@ -110,6 +121,7 @@ impl<'ctx> Parser<'ctx> {
 
         Ok(Expr::BindDef(BindDef {
             identifier,
+            is_mutable,
             ty,
             value: self.ctx.alloc_expr(value),
         }))

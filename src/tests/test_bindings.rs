@@ -41,3 +41,24 @@ fn test_binding_with_type_annotation() {
         |"#,
     );
 }
+
+#[test]
+fn test_mutable_binding() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    mut x := 10;
+        |}
+        |"#,
+    );
+
+    check(
+        program,
+        r#"
+        |fn @main () frame s:1 h:0
+        |    ldi.i32 s0, 10
+        |    ret
+        |end
+        |"#,
+    );
+}
