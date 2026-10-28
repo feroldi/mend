@@ -6,6 +6,7 @@ use crate::interner::Symbol;
 
 pub(crate) struct CodeGen<'ctx> {
     ctx: &'ctx CompilerContext,
+    emitted_insts: Vec<Inst>,
     scalar_frame_size: usize,
 }
 
@@ -13,6 +14,7 @@ impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn new(ctx: &'ctx CompilerContext) -> CodeGen<'ctx> {
         CodeGen {
             ctx,
+            emitted_insts: vec![],
             scalar_frame_size: 0,
         }
     }
@@ -40,21 +42,23 @@ impl<'ctx> CodeGen<'ctx> {
     fn gen_function(&mut self, name: Symbol, body: CompoundExpr) -> MbcFunction {
         self.scalar_frame_size = 0;
 
-        let mut insts: Vec<Inst> = body.exprs.iter().flat_map(|e| self.gen_expr(e)).collect();
+        for expr in body.exprs {
+            self.gen_expr(expr);
+        }
 
-        if !matches!(insts.last(), Some(Inst::Ret)) {
-            insts.push(Inst::Ret);
+        if !matches!(self.emitted_insts.last(), Some(Inst::Ret)) {
+            self.emit(Inst::Ret);
         }
 
         MbcFunction {
             name,
             scalar_frame_size: self.scalar_frame_size,
             handle_frame_size: 0,
-            insts,
+            insts: std::mem::take(&mut self.emitted_insts),
         }
     }
 
-    fn gen_expr(&mut self, expr: &Expr) -> Vec<Inst> {
+    fn gen_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Semi(expr) => self.gen_expr(expr),
             Expr::Return => self.gen_return_expr(),
@@ -63,24 +67,24 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn gen_expr_into(&mut self, expr: &Expr, ty: ScalarType, dest: ScalarReg) -> Vec<Inst> {
+    fn gen_expr_to_reg(&mut self, expr: &Expr, ty: ScalarType, dest: ScalarReg) {
         match expr {
             Expr::Const(constant) => self.gen_constant_expr(*constant, ty, dest),
             _ => unimplemented!(),
         }
     }
 
-    fn gen_constant_expr(&mut self, constant: Const, ty: ScalarType, dest: ScalarReg) -> Vec<Inst> {
+    fn gen_constant_expr(&mut self, constant: Const, ty: ScalarType, dest: ScalarReg) {
         match constant {
-            Const::Integer { value } => vec![Inst::Ldi {
+            Const::Integer { value } => self.emit(Inst::Ldi {
                 ty,
                 dest,
                 imm: value as i32,
-            }],
+            }),
         }
     }
 
-    fn gen_bind_def_expr(&mut self, bind_def: BindDef) -> Vec<Inst> {
+    fn gen_bind_def_expr(&mut self, bind_def: BindDef) {
         let dest = self.alloc_scalar_reg();
 
         let ty = match bind_def.ty {
@@ -88,7 +92,7 @@ impl<'ctx> CodeGen<'ctx> {
             None => ScalarType::I32,
         };
 
-        self.gen_expr_into(bind_def.value, ty, dest)
+        self.gen_expr_to_reg(bind_def.value, ty, dest)
     }
 
     fn alloc_scalar_reg(&mut self) -> ScalarReg {
@@ -98,8 +102,12 @@ impl<'ctx> CodeGen<'ctx> {
         reg
     }
 
-    fn gen_return_expr(&mut self) -> Vec<Inst> {
-        vec![Inst::Ret]
+    fn gen_return_expr(&mut self) {
+        self.emit(Inst::Ret);
+    }
+
+    fn emit(&mut self, inst: Inst) {
+        self.emitted_insts.push(inst);
     }
 }
 
