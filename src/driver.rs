@@ -16,7 +16,7 @@ pub(crate) fn compile(source_code: &str) -> Result<String, String> {
     let mut parser = Parser::new(tokens, &context);
     let program = parser
         .parse_program()
-        .map_err(|diagnostic| diagnostic.to_string())?;
+        .map_err(|diagnostics| diagnostics.render(context.get_source_map()))?;
 
     let mut codegen = CodeGen::new(&context);
     let mbc_program = codegen.gen_program(program);

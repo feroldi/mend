@@ -1,8 +1,9 @@
 use crate::ast::*;
 use crate::compiler_context::CompilerContext;
-use crate::diagnostics::Diagnostic;
+use crate::diagnostics::{Diagnostic, DiagnosticBag, DiagnosticCode, Label};
 use crate::scanner::{Delim, Keyword, Token, TokenKind};
 use crate::sema::Sema;
+use crate::source_map::{BytePos, Span};
 
 pub(crate) struct Parser<'ctx> {
     ctx: &'ctx CompilerContext,
@@ -21,12 +22,11 @@ impl<'ctx> Parser<'ctx> {
         }
     }
 
-    pub(crate) fn parse_program(&mut self) -> Result<Program<'ctx>, Diagnostic> {
+    pub(crate) fn parse_program(&mut self) -> Result<Program<'ctx>, DiagnosticBag> {
         let mut decls = vec![];
 
-        // In the future, diagnostics will be added to a diags vector from parse_ functions as
-        // `Result<..., Diagnostic>`.
-        while let Some(decl) = self.parse_decl() {
+        while self.peek().is_some() {
+            let decl = self.parse_decl()?;
             decls.push(decl);
         }
 
@@ -37,20 +37,21 @@ impl<'ctx> Parser<'ctx> {
         self.sema.act_on_program(program)
     }
 
-    fn parse_decl(&mut self) -> Option<Decl<'ctx>> {
-        let ident_tok = self.consume()?;
-        debug_assert_eq!(ident_tok.kind, TokenKind::Identifier);
+    fn parse_decl(&mut self) -> Result<Decl<'ctx>, DiagnosticBag> {
+        let ident_tok = self.expect(TokenKind::Identifier, DiagnosticCode::E0002, "identifier")?;
 
-        let op = self.consume()?;
-        debug_assert_eq!(op.kind, TokenKind::ColonColon);
+        self.expect(TokenKind::ColonColon, DiagnosticCode::E0003, "`::`")?;
 
-        let expr = self.parse_statement_expr()?;
+        let expr_tok = self.peek();
+        let expr = self.parse_statement_expr().ok_or_else(|| {
+            self.make_expected_diagnostic(DiagnosticCode::E0004, "expression", expr_tok)
+        })?;
 
         let identifier = self
             .ctx
             .get_or_intern_str(self.ctx.get_source_map().get_text_snippet(ident_tok.span));
 
-        Some(Decl {
+        Ok(Decl {
             identifier,
             value: self.ctx.alloc_expr(expr),
         })
@@ -112,6 +113,61 @@ impl<'ctx> Parser<'ctx> {
         Some(CompoundExpr {
             exprs: self.ctx.alloc_slice_of_expr(&exprs),
         })
+    }
+
+    fn expect(
+        &mut self,
+        kind: TokenKind,
+        code: DiagnosticCode,
+        expected: &str,
+    ) -> Result<Token, DiagnosticBag> {
+        match self.peek() {
+            Some(tok) if tok.kind == kind => {
+                self.consume();
+
+                Ok(tok)
+            }
+            found_tok => Err(self.make_expected_diagnostic(code, expected, found_tok)),
+        }
+    }
+
+    fn make_expected_diagnostic(
+        &self,
+        code: DiagnosticCode,
+        expected: &str,
+        found_tok: Option<Token>,
+    ) -> DiagnosticBag {
+        let (found, span) = match found_tok {
+            Some(tok) => (
+                format!("`{}`", self.ctx.get_source_map().get_text_snippet(tok.span)),
+                tok.span,
+            ),
+            None => {
+                let end_of_file = self.tokens.last().map_or(0, |tok| tok.span.end.0);
+
+                (
+                    "end of file".into(),
+                    Span {
+                        start: BytePos(end_of_file),
+                        end: BytePos(end_of_file),
+                    },
+                )
+            }
+        };
+
+        let mut diagnostics = DiagnosticBag::new();
+
+        diagnostics.add(Diagnostic {
+            code,
+            message: format!("expected {expected}, found {found}"),
+            label: Some(Label {
+                span,
+                message: format!("expected {expected}"),
+            }),
+            helps: vec![],
+        });
+
+        diagnostics
     }
 
     fn peek(&self) -> Option<Token> {
