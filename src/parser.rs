@@ -1,9 +1,12 @@
 use crate::ast::*;
 use crate::compiler_context::CompilerContext;
+use crate::diagnostics::Diagnostic;
 use crate::scanner::{Delim, Keyword, Token, TokenKind};
+use crate::sema::Sema;
 
 pub(crate) struct Parser<'ctx> {
     ctx: &'ctx CompilerContext,
+    sema: Sema<'ctx>,
     tokens: Vec<Token>,
     current_token_idx: usize,
 }
@@ -12,12 +15,13 @@ impl<'ctx> Parser<'ctx> {
     pub(crate) fn new(tokens: Vec<Token>, ctx: &'ctx CompilerContext) -> Parser<'ctx> {
         Parser {
             ctx,
+            sema: Sema::new(ctx),
             tokens,
             current_token_idx: 0,
         }
     }
 
-    pub(crate) fn parse_program(&mut self) -> Option<Program<'ctx>> {
+    pub(crate) fn parse_program(&mut self) -> Result<Program<'ctx>, Diagnostic> {
         let mut decls = vec![];
 
         // In the future, diagnostics will be added to a diags vector from parse_ functions as
@@ -26,9 +30,11 @@ impl<'ctx> Parser<'ctx> {
             decls.push(decl);
         }
 
-        Some(Program {
+        let program = Program {
             decls: self.ctx.alloc_slice_of_decl(&decls),
-        })
+        };
+
+        self.sema.act_on_program(program)
     }
 
     fn parse_decl(&mut self) -> Option<Decl<'ctx>> {
@@ -40,9 +46,9 @@ impl<'ctx> Parser<'ctx> {
 
         let expr = self.parse_statement_expr()?;
 
-        let identifier = self.ctx.get_or_intern_str(
-            &self.ctx.get_source_code()[ident_tok.span.start.0..ident_tok.span.end.0],
-        );
+        let identifier = self
+            .ctx
+            .get_or_intern_str(self.ctx.get_source_map().get_text_snippet(ident_tok.span));
 
         Some(Decl {
             identifier,

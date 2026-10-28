@@ -4,26 +4,27 @@ use bumpalo::Bump;
 
 use crate::ast::{Decl, Expr};
 use crate::interner::{StringInterner, Symbol};
+use crate::source_map::SourceMap;
 
 pub(crate) struct CompilerContext {
-    source_code: String,
+    source_map: SourceMap,
     string_interner: RefCell<StringInterner>,
     exprs: Bump,
     decls: Bump,
 }
 
 impl<'ctx> CompilerContext {
-    pub(crate) fn new(source_code: String) -> CompilerContext {
+    pub(crate) fn new(source_map: SourceMap) -> CompilerContext {
         CompilerContext {
-            source_code,
+            source_map,
             string_interner: Default::default(),
             exprs: Default::default(),
             decls: Default::default(),
         }
     }
 
-    pub(crate) fn get_source_code(&'ctx self) -> &'ctx str {
-        &self.source_code
+    pub(crate) fn get_source_map(&'ctx self) -> &'ctx SourceMap {
+        &self.source_map
     }
 
     pub(crate) fn get_or_intern_str(&'ctx self, string: &str) -> Symbol {

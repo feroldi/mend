@@ -2,6 +2,7 @@ use std::iter::Peekable;
 use std::str::Chars;
 
 use crate::compiler_context::CompilerContext;
+use crate::source_map::{BytePos, Span};
 
 pub(crate) struct Scanner<'ctx> {
     ctx: &'ctx CompilerContext,
@@ -15,7 +16,7 @@ impl<'ctx> Scanner<'ctx> {
     pub(crate) fn new(ctx: &'ctx CompilerContext) -> Scanner<'ctx> {
         Scanner {
             ctx,
-            char_stream: ctx.get_source_code().chars().peekable(),
+            char_stream: ctx.get_source_map().get_text().chars().peekable(),
             current_peek_pos: BytePos(0),
         }
     }
@@ -73,7 +74,10 @@ impl<'ctx> Scanner<'ctx> {
             self.bump();
         }
 
-        let ident_text = &self.ctx.get_source_code()[ident_span_start.0..self.current_peek_pos.0];
+        let ident_text = self.ctx.get_source_map().get_text_snippet(Span {
+            start: ident_span_start,
+            end: self.current_peek_pos,
+        });
 
         match ident_text {
             "return" => TokenKind::Keyword(Keyword::Return),
@@ -126,12 +130,3 @@ pub(crate) enum Delim {
     Paren,
     Curly,
 }
-
-#[derive(Clone, Copy)]
-pub(crate) struct Span {
-    pub(crate) start: BytePos,
-    pub(crate) end: BytePos,
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct BytePos(pub(crate) usize);
