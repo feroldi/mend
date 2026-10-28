@@ -199,9 +199,10 @@ fn test_assign_to_mutable_binding() {
     check(
         program,
         r#"
-        |fn @main () frame s:1 h:0
+        |fn @main () frame s:2 h:0
         |    ldi.i32 s0, 10
-        |    ldi.i32 s0, 20
+        |    ldi.i32 s1, 20
+        |    mov s0, s1
         |    ret
         |end
         |"#,
@@ -270,11 +271,12 @@ fn test_assign_to_copied_binding() {
     check(
         program,
         r#"
-        |fn @main () frame s:3 h:0
+        |fn @main () frame s:4 h:0
         |    ldi.i32 s0, 10
         |    mov s1, s0
-        |    ldi.i32 s1, 20
-        |    mov s2, s0
+        |    ldi.i32 s2, 20
+        |    mov s1, s2
+        |    mov s3, s0
         |    ret
         |end
         |"#,

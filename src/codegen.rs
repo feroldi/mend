@@ -112,8 +112,14 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn gen_assign_expr(&mut self, assign_expr: AssignExpr) {
         let binding = self.find_in_scope(assign_expr.identifier);
+        let value_reg = self.alloc_scalar_reg();
 
-        self.gen_expr_to_reg(assign_expr.value, binding.ty, binding.reg);
+        self.gen_expr_to_reg(assign_expr.value, binding.ty, value_reg);
+
+        self.emit(Inst::Mov {
+            dest: binding.reg,
+            source: value_reg,
+        });
     }
 
     fn gen_compound_expr(&mut self, compound_expr: CompoundExpr) {

@@ -128,6 +128,22 @@ Pick a Mend language functionality, and do the following on a repeat, until it i
 7. Ask the programmer to review the new code, as they might want to tweak it.
 8. If the functionality is completed, then we're done, otherwise go back to step 3.
 
+## Correct before fast
+
+The first goal is a working compiler that outputs simple, unoptimized bytecode.
+Code generation favours obvious correctness over compact output:
+
+- Every intermediate value goes into a fresh scalar register; registers are not reused.
+- An assignment generates its value into a fresh register, then `mov`s it into the binding's register.
+  Writing straight into the binding's register would clobber it when the value reads the binding (`x = 2 + x`).
+
+Optimization passes come later, once the functionalities below are implemented.
+Each pass gets its own test module that checks its output, so the tests of each functionality keep checking the unoptimized bytecode.
+Examples of such passes:
+
+- liveness-based register allocation, which reuses registers (`rfc-mend-bytecode.md` §18.1);
+- copy coalescing, which removes a `mov` from a temporary by having the instruction that produced the temporary write the destination directly.
+
 ## Functionalities
 
 Once a functionality is implemented, tick off the item in the list below.
