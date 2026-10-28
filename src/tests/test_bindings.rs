@@ -159,3 +159,28 @@ fn test_shadowed_binding_inside_block() {
         |"#,
     );
 }
+
+#[test]
+fn test_read_binding_out_of_its_block() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    {
+        |        z := 1;
+        |    }
+        |    y := z;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0006]: cannot find binding `z` in this scope
+        | --> <source>:5:10
+        |  |
+        |5 |     y := z;
+        |  |          ^ not found in this scope
+        |"#,
+    );
+}
