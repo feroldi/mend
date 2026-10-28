@@ -156,3 +156,23 @@ fn test_main_declared_twice() {
         |"#,
     );
 }
+
+#[test]
+fn test_function_without_closing_paren() {
+    let program = compile(
+        r#"
+        |main :: ( {}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0002]: expected `)`, found `{`
+        | --> <source>:1:11
+        |  |
+        |1 | main :: ( {}
+        |  |           ^ expected `)`
+        |"#,
+    );
+}

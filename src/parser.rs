@@ -84,8 +84,7 @@ impl<'ctx> Parser<'ctx> {
     }
 
     fn parse_function(&mut self) -> Result<Expr<'ctx>, DiagnosticBag> {
-        let closed_paren = self.consume_tok()?;
-        debug_assert_eq!(closed_paren.kind, TokenKind::Closed(Delim::Paren));
+        self.expect_and_consume_tok(TokenKind::Closed(Delim::Paren))?;
 
         let open_curly_tok = self.consume_tok()?;
         debug_assert_eq!(open_curly_tok.kind, TokenKind::Open(Delim::Curly));
