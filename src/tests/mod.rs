@@ -1,9 +1,12 @@
 use crate::driver;
 
+mod test_main;
+
 fn compile(source_code: &str) -> String {
     driver::compile(&strip_margin(source_code))
 }
 
+// TODO: Write a check_fail function to test against diagnostics.
 fn check<S: AsRef<str>>(program: S, expected_program: &str) {
     use pretty_assertions::assert_eq;
 

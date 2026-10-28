@@ -35,8 +35,7 @@ Lineage: Lua 5's register VM, WebAssembly's typed opcodes and validation, the
 JVM's verifier and constant pool, and Pike/backtracking regex programs (§5).
 
 **Execution model.** `mend` compiles the program at the start of each run and
-interprets it immediately. "JIT" in
-Mend means compile-on-run; no native code is generated (§6.2).
+interprets it immediately; no native code is generated (§6.2).
 
 ## 2. Motivation
 
@@ -138,10 +137,9 @@ checked operation raises on its own (`addi` raises `Overflow`, `ld` raises
 6. **Run `main`.**
 7. **Commit** the output (Mend §5.2), or report the error.
 
-### 6.2 What "JIT" means
+### 6.2 Interpretation
 
-`mend` compiles just in time, at the start of every run, and interprets the
-result. The interpreter pre-decodes instruction words into an internal form
+`mend` compiles at the start of every run and interprets the result. The interpreter pre-decodes instruction words into an internal form
 and dispatches with one loop. The pre-decoded form is not specified; only the
 behaviour of the encoded instructions is.
 
@@ -1167,7 +1165,7 @@ Disambiguation:
 |-------------------------------------------------|------------------------------------------------------------------------|
 | Stack machine (Wasm, JVM)                       | More instructions, and so more dispatches, per Mend operation.         |
 | One bank of tagged values                       | Runtime type dispatch on every operation, against Mend §18.3's typed core; larger registers. |
-| Native code JIT now                             | Compile latency exceeds typical run time; much larger implementation.   |
+| Native code generation                          | Compile latency exceeds typical run time; much larger implementation.   |
 | Tree-walking interpreter over Typed Core        | Per-node dispatch and dynamic layouts; nothing to serialize or verify. |
 | Tracing garbage collector                       | Values cannot form cycles; copy-on-write needs counts anyway.          |
 | 32-bit words with 8-bit operands (Lua)          | 256 registers is too few without spilling; typed opcodes don't fit 8 bits. |

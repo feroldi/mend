@@ -124,6 +124,46 @@ Pick a Mend language functionality, and do the following on a repeat, until it i
 7. Ask the programmer to review the new code, as they might want to tweak it.
 8. If the functionality is completed, then we're done, otherwise go back to step 3.
 
+## Functionalities
+
+- [ ] Program skeleton and `main`
+- [ ] Literals and lexing
+- [ ] Constants
+- [ ] Bindings
+- [ ] Type inference and coercion
+- [ ] Arithmetic operators
+- [ ] Bitwise and shift operators
+- [ ] Comparison and logical operators
+- [ ] Casts
+- [ ] Ranges
+- [ ] `if`/`else`
+- [ ] `match`
+- [ ] `for` loops
+- [ ] Functions
+- [ ] Lambdas and closures
+- [ ] Method calls
+- [ ] Tuples
+- [ ] Arrays and sequences
+- [ ] Strings
+- [ ] `Opt[T]`
+- [ ] Typed content access
+- [ ] Byte order
+- [ ] Views
+- [ ] Structs
+- [ ] Enums
+- [ ] Content-function inference
+- [ ] Top-level statements
+- [ ] Pattern literals
+- [ ] Match values and search functions
+- [ ] Edit statements
+- [ ] Scanning during edits
+- [ ] `batch`
+- [ ] Assertions
+- [ ] Parameters
+- [ ] Modules
+- [ ] Standard library
+- [ ] Diagnostics
+
 ## There's no plan on how to implement the bytecode virtual machine for now.
 
 This will be planned later.
