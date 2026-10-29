@@ -65,6 +65,10 @@ pub(crate) enum Diag {
     IntegerLiteralOutOfRange {
         ty: Type,
     },
+    InvalidDigit {
+        digit: char,
+        radix: u32,
+    },
 }
 
 impl Diag {
@@ -79,6 +83,7 @@ impl Diag {
             Diag::AssignToImmutableBinding { .. } => "E0007",
             Diag::InvalidIntegerSuffix { .. } => "E0008",
             Diag::IntegerLiteralOutOfRange { .. } => "E0009",
+            Diag::InvalidDigit { .. } => "E0010",
         }
     }
 
@@ -105,6 +110,15 @@ impl Diag {
             ),
             Diag::IntegerLiteralOutOfRange { ty } => {
                 format!("integer literal out of range for `{ty}`")
+            }
+            Diag::InvalidDigit { digit, radix } => {
+                let base = match radix {
+                    2 => "binary",
+                    8 => "octal",
+                    _ => unreachable!("only binary and octal literals report invalid digits"),
+                };
+
+                format!("invalid digit `{digit}` in {base} literal")
             }
         }
     }

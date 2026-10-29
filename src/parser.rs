@@ -4,6 +4,7 @@ use crate::constant_parser::{NumConst, parse_numeric_constant};
 use crate::diagnostics::{Diag, Diagnostic, DiagnosticBag};
 use crate::scanner::{Delim, Keyword, Scanner, Token, TokenKind};
 use crate::sema::Sema;
+use crate::source_map::{BytePos, Span};
 
 pub(crate) struct Parser<'ctx> {
     ctx: &'ctx CompilerContext,
@@ -91,6 +92,23 @@ impl<'ctx> Parser<'ctx> {
 
         match parse_numeric_constant(lexeme) {
             NumConst::Int(integer) => {
+                if let Some(invalid_digit_offset) = integer.invalid_digit_offset {
+                    let start = tok.span.start + BytePos::from_usize(invalid_digit_offset);
+                    let digit_span = Span {
+                        start,
+                        end: start + BytePos::from_usize(1),
+                    };
+                    let digit = lexeme[invalid_digit_offset..].chars().next().unwrap();
+
+                    return Err(Diagnostic::builder(Diag::InvalidDigit {
+                        digit,
+                        radix: integer.radix,
+                    })
+                    .label(digit_span, "invalid digit")
+                    .build()
+                    .into());
+                }
+
                 let suffix = match integer.suffix {
                     Some(suffix) => match get_type_name_from_str(suffix) {
                         Some(ty) => Some(ty),

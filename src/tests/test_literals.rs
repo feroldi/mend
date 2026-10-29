@@ -303,3 +303,25 @@ fn test_unsuffixed_integer_overflows_u64() {
         |"#,
     );
 }
+
+#[test]
+fn test_invalid_digit_in_binary_integer() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 0b102;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0010]: invalid digit `2` in binary literal
+        | --> <source>:2:14
+        |  |
+        |2 |     x := 0b102;
+        |  |              ^ invalid digit
+        |"#,
+    );
+}
