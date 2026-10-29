@@ -1,3 +1,4 @@
+use crate::ast::Type;
 use crate::compiler_context::CompilerContext;
 use crate::interner::Symbol;
 use crate::scanner::TokenKind;
@@ -61,6 +62,9 @@ pub(crate) enum Diag {
     InvalidIntegerSuffix {
         suffix: Symbol,
     },
+    IntegerLiteralOutOfRange {
+        ty: Type,
+    },
 }
 
 impl Diag {
@@ -74,6 +78,7 @@ impl Diag {
             Diag::BindingNotFound { .. } => "E0006",
             Diag::AssignToImmutableBinding { .. } => "E0007",
             Diag::InvalidIntegerSuffix { .. } => "E0008",
+            Diag::IntegerLiteralOutOfRange { .. } => "E0009",
         }
     }
 
@@ -98,6 +103,9 @@ impl Diag {
                 "invalid suffix `{}` for integer literal",
                 ctx.resolve_symbol(*suffix)
             ),
+            Diag::IntegerLiteralOutOfRange { ty } => {
+                format!("integer literal out of range for `{ty}`")
+            }
         }
     }
 }

@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::interner::Symbol;
 use crate::source_map::Span;
 
@@ -71,6 +73,60 @@ pub(crate) enum Type {
     Never,
     /// The type of a function that takes no arguments and returns `()`.
     Function,
+}
+
+impl Type {
+    /// The inclusive bounds of an integer type.
+    pub(crate) fn integer_bounds(self) -> (i64, u64) {
+        debug_assert!(self.is_integer_type());
+
+        let bounds = match self {
+            Type::U8 => (0, u8::MAX as u64),
+            Type::U16 => (0, u16::MAX as u64),
+            Type::U32 => (0, u32::MAX as u64),
+            Type::U64 => (0, u64::MAX),
+            Type::I8 => (i8::MIN as i64, i8::MAX as u64),
+            Type::I16 => (i16::MIN as i64, i16::MAX as u64),
+            Type::I32 => (i32::MIN as i64, i32::MAX as u64),
+            Type::I64 => (i64::MIN, i64::MAX as u64),
+            Type::IntLiteral | Type::Unit | Type::Never | Type::Function => unreachable!(),
+        };
+
+        bounds
+    }
+
+    pub(crate) fn is_integer_type(self) -> bool {
+        match self {
+            Type::U8 => true,
+            Type::U16 => true,
+            Type::U32 => true,
+            Type::U64 => true,
+            Type::I8 => true,
+            Type::I16 => true,
+            Type::I32 => true,
+            Type::I64 => true,
+            _ => false,
+        }
+    }
+}
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::U8 => write!(f, "u8"),
+            Type::U16 => write!(f, "u16"),
+            Type::U32 => write!(f, "u32"),
+            Type::U64 => write!(f, "u64"),
+            Type::I8 => write!(f, "i8"),
+            Type::I16 => write!(f, "i16"),
+            Type::I32 => write!(f, "i32"),
+            Type::I64 => write!(f, "i64"),
+            Type::IntLiteral => write!(f, "{{integer}}"),
+            Type::Unit => write!(f, "()"),
+            Type::Never => write!(f, "!"),
+            Type::Function => write!(f, "() -> ()"),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]

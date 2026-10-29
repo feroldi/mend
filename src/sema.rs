@@ -50,11 +50,16 @@ impl<'ctx> Sema<'ctx> {
         &mut self,
         value: u64,
         suffix: Option<Type>,
-    ) -> Expr<'ctx> {
-        Expr {
+        span: Span,
+    ) -> Result<Expr<'ctx>, DiagnosticBag> {
+        if let Some(ty) = suffix {
+            check_integer_fits_type(value, ty, span)?;
+        }
+
+        Ok(Expr {
             kind: ExprKind::Const(Const::Integer { value }),
             ty: suffix.unwrap_or(Type::IntLiteral),
-        }
+        })
     }
 
     pub(crate) fn act_on_bind_def(&mut self, bind_def: BindDef<'ctx>) -> Expr<'ctx> {
@@ -191,6 +196,21 @@ impl<'ctx> Sema<'ctx> {
 
         Ok(program)
     }
+}
+
+fn check_integer_fits_type(value: u64, ty: Type, span: Span) -> Result<(), DiagnosticBag> {
+    let (min, max) = ty.integer_bounds();
+
+    if value <= max {
+        return Ok(());
+    }
+
+    Err(DiagnosticBag::with_diag(
+        Diagnostic::builder(Diag::IntegerLiteralOutOfRange { ty })
+            .label(span, format!("does not fit in `{ty}`"))
+            .help(format!("the range of `{ty}` is `{min}..={max}`"))
+            .build(),
+    ))
 }
 
 fn binding_not_found(ident: Symbol, span: Span) -> DiagnosticBag {

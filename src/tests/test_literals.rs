@@ -164,3 +164,26 @@ fn test_integer_with_unknown_suffix() {
         |"#,
     );
 }
+
+#[test]
+fn test_suffixed_integer_out_of_range() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 256u8;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0009]: integer literal out of range for `u8`
+        | --> <source>:2:10
+        |  |
+        |2 |     x := 256u8;
+        |  |          ^^^^^ does not fit in `u8`
+        |  = help: the range of `u8` is `0..=255`
+        |"#,
+    );
+}

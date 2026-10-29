@@ -109,7 +109,8 @@ impl<'ctx> Parser<'ctx> {
                     None => None,
                 };
 
-                Ok(self.sema.act_on_integer_constant(integer.value, suffix))
+                self.sema
+                    .act_on_integer_constant(integer.value, suffix, tok.span)
             }
         }
     }
