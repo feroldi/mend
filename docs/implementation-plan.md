@@ -120,13 +120,16 @@ After having the project in place (i.e., the tests module and helper functions a
 Pick a Mend language functionality, and do the following on a repeat, until it is completed:
 
 1. Pick the next functionality to implement, and list the features that need to be done; always consider the happy and unhappy paths (diagnostics); write a summary and let the programmer review.
-2. If positive with the functionality choice, create a test module file for that functionality.
+2. If the programmer approves the summary, create a test module file for that functionality.
 3. Write a unit test.
 4. Check that the unit test fails by running `cargo test`.
-5. Write JUST ENOUGH code so that this unit test passes.
-6. Check the unit test passes by running `cargo test`.
-7. Ask the programmer to review the new code, as they might want to tweak it.
-8. If the functionality is completed, then we're done, otherwise go back to step 3.
+5. Ask for the programmer to review the unit test.
+6. If approved, write JUST ENOUGH code so that this unit test passes. Otherwise, adjust the unit test and go back to step 5.
+7. Check the unit test passes by running `cargo test`.
+8. Ask the programmer to review the new code, as they might want to tweak it.
+9. After the programmer approves, check if the functionality is completed. If so, then we're done. Otherwise, go to step 3.
+
+DO NOT BREAK ANY OF THOSE STEPS. You should strictly follow them.
 
 ## Correct before fast
 
