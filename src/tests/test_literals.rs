@@ -325,3 +325,25 @@ fn test_invalid_digit_in_binary_integer() {
         |"#,
     );
 }
+
+#[test]
+fn test_hexadecimal_integer_missing_digits() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 0x;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0011]: hexadecimal literal is missing digits
+        | --> <source>:2:10
+        |  |
+        |2 |     x := 0x;
+        |  |          ^^ expected at least one digit after `0x`
+        |"#,
+    );
+}

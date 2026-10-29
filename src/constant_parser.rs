@@ -9,6 +9,7 @@ pub(crate) struct IntegerConst<'a> {
     pub(crate) has_overflowed: bool,
     pub(crate) suffix: Option<&'a str>,
     pub(crate) radix: u32,
+    pub(crate) has_no_digits: bool,
     /// The byte offset, in the lexeme, of the first digit too large for the radix.
     pub(crate) invalid_digit_offset: Option<usize>,
 }
@@ -17,6 +18,8 @@ pub(crate) fn parse_numeric_constant(token_lexeme: &str) -> NumConst<'_> {
     let attrs = parse_num_const_attributes(token_lexeme);
     let suffix = attrs.suffix;
     let radix = attrs.radix;
+
+    let has_no_digits = attrs.digits.is_empty() || attrs.digits.iter().all(|&ch| ch == b'_');
 
     let invalid_digit_offset = attrs
         .digits
@@ -31,6 +34,7 @@ pub(crate) fn parse_numeric_constant(token_lexeme: &str) -> NumConst<'_> {
         has_overflowed,
         suffix,
         radix,
+        has_no_digits,
         invalid_digit_offset,
     })
 }
@@ -75,13 +79,14 @@ fn parse_num_const_attributes(token_lexeme: &str) -> NumConstAttrs<'_> {
 fn eval_integer_constant(attrs: NumConstAttrs) -> (u64, bool) {
     let mut value = 0u64;
     let mut has_overflowed = false;
+    let radix = attrs.radix as u64;
 
     for &digit in attrs.digits {
         if digit == b'_' {
             continue;
         }
 
-        let (low_mul, overflowed) = value.overflowing_mul(attrs.radix);
+        let (low_mul, overflowed) = value.overflowing_mul(radix);
         has_overflowed |= overflowed;
         value = low_mul;
 

@@ -69,6 +69,9 @@ pub(crate) enum Diag {
         digit: char,
         radix: u32,
     },
+    IntegerMissingDigits {
+        radix: u32,
+    },
 }
 
 impl Diag {
@@ -84,6 +87,7 @@ impl Diag {
             Diag::InvalidIntegerSuffix { .. } => "E0008",
             Diag::IntegerLiteralOutOfRange { .. } => "E0009",
             Diag::InvalidDigit { .. } => "E0010",
+            Diag::IntegerMissingDigits { .. } => "E0011",
         }
     }
 
@@ -112,15 +116,22 @@ impl Diag {
                 format!("integer literal out of range for `{ty}`")
             }
             Diag::InvalidDigit { digit, radix } => {
-                let base = match radix {
-                    2 => "binary",
-                    8 => "octal",
-                    _ => unreachable!("only binary and octal literals report invalid digits"),
-                };
-
-                format!("invalid digit `{digit}` in {base} literal")
+                format!("invalid digit `{digit}` in {} literal", radix_name(*radix))
+            }
+            Diag::IntegerMissingDigits { radix } => {
+                format!("{} literal is missing digits", radix_name(*radix))
             }
         }
+    }
+}
+
+fn radix_name(radix: u32) -> &'static str {
+    match radix {
+        2 => "binary",
+        8 => "octal",
+        10 => "decimal",
+        16 => "hexadecimal",
+        _ => unreachable!("no integer literal has radix {radix}"),
     }
 }
 

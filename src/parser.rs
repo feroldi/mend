@@ -92,6 +92,22 @@ impl<'ctx> Parser<'ctx> {
 
         match parse_numeric_constant(lexeme) {
             NumConst::Int(integer) => {
+                if integer.has_no_digits {
+                    // Decimals by definition don't have a prefix, and so they can only exist if at
+                    // least one digit exists. So, only prefixed integers can miss digits.
+                    let prefix = &lexeme[..2];
+
+                    return Err(Diagnostic::builder(Diag::IntegerMissingDigits {
+                        radix: integer.radix,
+                    })
+                    .label(
+                        tok.span,
+                        format!("expected at least one digit after `{prefix}`"),
+                    )
+                    .build()
+                    .into());
+                }
+
                 if let Some(invalid_digit_offset) = integer.invalid_digit_offset {
                     let start = tok.span.start + BytePos::from_usize(invalid_digit_offset);
                     let digit_span = Span {
