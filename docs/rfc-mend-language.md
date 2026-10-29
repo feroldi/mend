@@ -270,7 +270,7 @@ enums, `batch`. Bindings are statements, not expressions.
 |------------------|--------------------------------------------|----------------------------|
 | Integer          | `42`, `0x7F`, `0b1010`, `0o17`, `1_000`     | inferred; defaults to `i32` |
 | Suffixed integer | `42u8`, `0xFFu8`, `-1i64`, `16usize`        | the suffix type            |
-| Float            | `1.5`, `2.0e-3`, `1.0f32`                   | inferred; defaults to `f64` |
+| Float            | `1.5`, `2.0e-3`, `1e3`, `1f32`              | inferred; defaults to `f64` |
 | Bool / char      | `true`, `'a'`, `'\u{1F600}'`                | `bool` / `char`            |
 | Byte char        | `b'a'`                                      | `u8`                       |
 | String           | `"id = {id}"` (no interpolation)            | `str`                      |
@@ -281,7 +281,12 @@ enums, `batch`. Bindings are statements, not expressions.
 
 Lexical rules:
 
-- A float needs a digit after the `.`, so `0..10` is a range.
+- A decimal literal is a float if it has a fraction (`.` followed by a
+  digit), an exponent (`e` or `E`, an optional sign, then digits), or an
+  `f32`/`f64` suffix: `1.5`, `1e3` and `1f32` are floats. A `.` not followed
+  by a digit is not part of the literal, so `0..10` is a range.
+- Literals with a `0x`, `0b` or `0o` prefix are always integers; in `0x1f32`,
+  `f32` is hex digits.
 - An integer suffix starts with `u` or `i`, which are not hex digits.
 - A `-` written directly before an integer literal folds into it, so
   `-128i8` is valid.
@@ -1495,7 +1500,6 @@ what the implementation currently does.
 | Question | Tradeoff | Scanner | See |
 |----------|----------|---------|-----|
 | Q7. Where a format spec starts | §7 starts the spec at the first `:` outside parentheses and brackets, so `f"{riff::NAME}"` splits at `::`. Excluding `::` and `:=` and tracking braces keeps qualified names and blocks usable, at the cost of a longer rule. | `::` and `:=` do not start a spec; braces are tracked | §7 |
-| Q8. Floats without a `.` | Accepting `1e10` and `3f64` follows Rust. Requiring a `.` makes every float visibly a float. | accepted | §7 |
 | Q9. `\xHH` above `0x7F` in `str` and `char` | Allowing it as a code point (U+0080–U+00FF) is convenient. Rejecting it, as Rust does, avoids reading `\xFF` as a byte that would make the string invalid UTF-8. | rejected | §7 |
 | Q10. Non-ASCII characters in `b"…"` and `b'…'` | Encoding them as UTF-8 allows `b"é"`. Rejecting them, as Rust does, keeps byte literals one byte per character; `x"C3 A9"` covers the rest. | rejected | §7 |
 | Q11. Hex-bytes grouping | Requiring whitespace between bytes catches odd-length typos earlier. Allowing whitespace only between two-digit bytes also accepts `x"DEADBEEF"`. | two adjacent digits per byte; whitespace optional between bytes | §7 |
@@ -1513,6 +1517,12 @@ Questions resolved on 2026-10-16:
 | Q4. Recoverable errors                      | None; `Opt[T]` forms only                              | §15        |
 | Q5. Greedy gap marker `[2..8]!`             | Deferred                                           | §21        |
 | Q6. Captures as offsets                     | No                                                 | §22        |
+
+Questions resolved on 2026-10-29:
+
+| Question                     | Decision                                                  | See |
+|------------------------------|-----------------------------------------------------------|-----|
+| Q8. Floats without a `.`     | Allowed, as in Rust: `1e3` and `1f32` are floats          | §7  |
 
 ## Appendix A. Examples
 
