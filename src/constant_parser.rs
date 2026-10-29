@@ -1,10 +1,4 @@
 #[derive(PartialEq, Eq, Debug)]
-pub(crate) struct ParseResult<'a> {
-    pub(crate) num_const: NumConst<'a>,
-    pub(crate) has_overflowed: bool,
-}
-
-#[derive(PartialEq, Eq, Debug)]
 pub(crate) enum NumConst<'a> {
     Int(IntegerConst<'a>),
 }
@@ -12,19 +6,21 @@ pub(crate) enum NumConst<'a> {
 #[derive(PartialEq, Eq, Debug)]
 pub(crate) struct IntegerConst<'a> {
     pub(crate) value: u64,
+    pub(crate) has_overflowed: bool,
     pub(crate) suffix: Option<&'a str>,
 }
 
-pub(crate) fn parse_numeric_constant(token_lexeme: &str) -> ParseResult<'_> {
+pub(crate) fn parse_numeric_constant(token_lexeme: &str) -> NumConst<'_> {
     let attrs = parse_num_const_attributes(token_lexeme);
     let suffix = attrs.suffix;
 
     let (value, has_overflowed) = eval_integer_constant(attrs);
 
-    ParseResult {
-        num_const: NumConst::Int(IntegerConst { value, suffix }),
+    NumConst::Int(IntegerConst {
+        value,
         has_overflowed,
-    }
+        suffix,
+    })
 }
 
 struct NumConstAttrs<'a> {

@@ -280,3 +280,26 @@ fn test_integer_overflows_u64() {
         |"#,
     );
 }
+
+#[test]
+fn test_unsuffixed_integer_overflows_u64() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x: u64 = 18_446_744_073_709_551_616;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0009]: integer literal out of range for `u64`
+        | --> <source>:2:14
+        |  |
+        |2 |     x: u64 = 18_446_744_073_709_551_616;
+        |  |              ^^^^^^^^^^^^^^^^^^^^^^^^^^ does not fit in `u64`
+        |  = help: the range of `u64` is `0..=18446744073709551615`
+        |"#,
+    );
+}

@@ -58,7 +58,11 @@ impl<'ctx> Sema<'ctx> {
         }
 
         Ok(Expr {
-            kind: ExprKind::Const(Const::Integer { value, span }),
+            kind: ExprKind::Const(Const::Integer {
+                value,
+                has_overflowed,
+                span,
+            }),
             ty: suffix.unwrap_or(Type::IntLiteral),
         })
     }
@@ -171,13 +175,18 @@ impl<'ctx> Sema<'ctx> {
             return Ok(expr);
         }
 
-        let ExprKind::Const(Const::Integer { value, span }) = expr.kind else {
+        let ExprKind::Const(Const::Integer {
+            value,
+            has_overflowed,
+            span,
+        }) = expr.kind
+        else {
             unreachable!("only integer literals have type {}", Type::IntLiteral);
         };
 
         let ty = expected_ty.unwrap_or(Type::I32);
 
-        check_integer_fits_type(value, false, ty, span)?;
+        check_integer_fits_type(value, has_overflowed, ty, span)?;
 
         Ok(Expr { ty, ..expr })
     }
