@@ -35,7 +35,7 @@ pub(crate) enum ExprKind<'ctx> {
 
 #[derive(Clone, Copy)]
 pub(crate) enum Const {
-    Integer { value: u64 },
+    Integer { value: u64, span: Span },
 }
 
 #[derive(Clone, Copy)]

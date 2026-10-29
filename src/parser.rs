@@ -179,12 +179,12 @@ impl<'ctx> Parser<'ctx> {
             .ctx
             .get_or_intern_str(self.ctx.get_source_map().get_text_snippet(ident_tok.span));
 
-        Ok(self.sema.act_on_bind_def(BindDef {
+        self.sema.act_on_bind_def(BindDef {
             identifier,
             is_mutable,
             ty,
             value: self.ctx.alloc_expr(value),
-        }))
+        })
     }
 
     fn parse_type(&mut self) -> Result<Type, DiagnosticBag> {

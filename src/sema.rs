@@ -57,13 +57,16 @@ impl<'ctx> Sema<'ctx> {
         }
 
         Ok(Expr {
-            kind: ExprKind::Const(Const::Integer { value }),
+            kind: ExprKind::Const(Const::Integer { value, span }),
             ty: suffix.unwrap_or(Type::IntLiteral),
         })
     }
 
-    pub(crate) fn act_on_bind_def(&mut self, bind_def: BindDef<'ctx>) -> Expr<'ctx> {
-        let value = self.resolve_literal_type(*bind_def.value, bind_def.ty);
+    pub(crate) fn act_on_bind_def(
+        &mut self,
+        bind_def: BindDef<'ctx>,
+    ) -> Result<Expr<'ctx>, DiagnosticBag> {
+        let value = self.resolve_expr_literal_type(*bind_def.value, bind_def.ty)?;
 
         self.get_this_scope_mut().insert(
             bind_def.identifier,
@@ -73,13 +76,13 @@ impl<'ctx> Sema<'ctx> {
             },
         );
 
-        Expr {
+        Ok(Expr {
             kind: ExprKind::BindDef(BindDef {
                 value: self.ctx.alloc_expr(value),
                 ..bind_def
             }),
             ty: Type::Unit,
-        }
+        })
     }
 
     pub(crate) fn act_on_bind_ref(
@@ -119,7 +122,7 @@ impl<'ctx> Sema<'ctx> {
             ));
         }
 
-        let value = self.resolve_literal_type(*assign_expr.value, Some(binding.ty));
+        let value = self.resolve_expr_literal_type(*assign_expr.value, Some(binding.ty))?;
 
         Ok(Expr {
             kind: ExprKind::Assign(AssignExpr {
@@ -158,15 +161,24 @@ impl<'ctx> Sema<'ctx> {
         }
     }
 
-    fn resolve_literal_type(&self, expr: Expr<'ctx>, expected_ty: Option<Type>) -> Expr<'ctx> {
+    fn resolve_expr_literal_type(
+        &self,
+        expr: Expr<'ctx>,
+        expected_ty: Option<Type>,
+    ) -> Result<Expr<'ctx>, DiagnosticBag> {
         if expr.ty != Type::IntLiteral {
-            return expr;
+            return Ok(expr);
         }
 
-        Expr {
-            ty: expected_ty.unwrap_or(Type::I32),
-            ..expr
-        }
+        let ExprKind::Const(Const::Integer { value, span }) = expr.kind else {
+            unreachable!("only integer literals have type {}", Type::IntLiteral);
+        };
+
+        let ty = expected_ty.unwrap_or(Type::I32);
+
+        check_integer_fits_type(value, ty, span)?;
+
+        Ok(Expr { ty, ..expr })
     }
 
     pub(crate) fn act_on_program(
