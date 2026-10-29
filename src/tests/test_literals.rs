@@ -210,3 +210,73 @@ fn test_annotated_integer_out_of_range() {
         |"#,
     );
 }
+
+#[test]
+fn test_assigned_integer_out_of_range() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    mut x: u8 = 0;
+        |    x = 300;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0009]: integer literal out of range for `u8`
+        | --> <source>:3:9
+        |  |
+        |3 |     x = 300;
+        |  |         ^^^ does not fit in `u8`
+        |  = help: the range of `u8` is `0..=255`
+        |"#,
+    );
+}
+
+#[test]
+fn test_default_integer_out_of_range() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 3_000_000_000;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0009]: integer literal out of range for `i32`
+        | --> <source>:2:10
+        |  |
+        |2 |     x := 3_000_000_000;
+        |  |          ^^^^^^^^^^^^^ does not fit in `i32`
+        |  = help: the range of `i32` is `-2147483648..=2147483647`
+        |"#,
+    );
+}
+
+#[test]
+fn test_integer_overflows_u64() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 18_446_744_073_709_551_616u64;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0009]: integer literal out of range for `u64`
+        | --> <source>:2:10
+        |  |
+        |2 |     x := 18_446_744_073_709_551_616u64;
+        |  |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ does not fit in `u64`
+        |  = help: the range of `u64` is `0..=18446744073709551615`
+        |"#,
+    );
+}

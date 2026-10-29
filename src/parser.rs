@@ -89,7 +89,9 @@ impl<'ctx> Parser<'ctx> {
     fn parse_numeric_constant(&mut self, tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
         let lexeme = self.ctx.get_source_map().get_text_snippet(tok.span);
 
-        match parse_numeric_constant(lexeme).num_const {
+        let parse_result = parse_numeric_constant(lexeme);
+
+        match parse_result.num_const {
             NumConst::Int(integer) => {
                 let suffix = match integer.suffix {
                     Some(suffix) => match get_type_name_from_str(suffix) {
@@ -109,8 +111,12 @@ impl<'ctx> Parser<'ctx> {
                     None => None,
                 };
 
-                self.sema
-                    .act_on_integer_constant(integer.value, suffix, tok.span)
+                self.sema.act_on_integer_constant(
+                    integer.value,
+                    parse_result.has_overflowed,
+                    suffix,
+                    tok.span,
+                )
             }
         }
     }

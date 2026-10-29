@@ -49,11 +49,12 @@ impl<'ctx> Sema<'ctx> {
     pub(crate) fn act_on_integer_constant(
         &mut self,
         value: u64,
+        has_overflowed: bool,
         suffix: Option<Type>,
         span: Span,
     ) -> Result<Expr<'ctx>, DiagnosticBag> {
         if let Some(ty) = suffix {
-            check_integer_fits_type(value, ty, span)?;
+            check_integer_fits_type(value, has_overflowed, ty, span)?;
         }
 
         Ok(Expr {
@@ -176,7 +177,7 @@ impl<'ctx> Sema<'ctx> {
 
         let ty = expected_ty.unwrap_or(Type::I32);
 
-        check_integer_fits_type(value, ty, span)?;
+        check_integer_fits_type(value, false, ty, span)?;
 
         Ok(Expr { ty, ..expr })
     }
@@ -210,10 +211,15 @@ impl<'ctx> Sema<'ctx> {
     }
 }
 
-fn check_integer_fits_type(value: u64, ty: Type, span: Span) -> Result<(), DiagnosticBag> {
+fn check_integer_fits_type(
+    value: u64,
+    has_overflowed: bool,
+    ty: Type,
+    span: Span,
+) -> Result<(), DiagnosticBag> {
     let (min, max) = ty.integer_bounds();
 
-    if value <= max {
+    if !has_overflowed && value <= max {
         return Ok(());
     }
 
