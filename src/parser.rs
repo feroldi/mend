@@ -276,6 +276,13 @@ impl<'ctx> Parser<'ctx> {
 fn get_type_name_from_str(name: &str) -> Type {
     match name {
         "u8" => Type::U8,
+        "u16" => Type::U16,
+        "u32" => Type::U32,
+        "u64" | "usize" => Type::U64,
+        "i8" => Type::I8,
+        "i16" => Type::I16,
+        "i32" => Type::I32,
+        "i64" | "isize" => Type::I64,
         _ => todo!("other types"),
     }
 }

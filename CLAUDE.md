@@ -222,6 +222,7 @@ Reuse these in follow-up language RFCs unless the brief says otherwise.
 - **Open requests from bytecode §19.3** to the language RFC: diagnostic
   range E07xx for backend and const-eval errors, and running const-eval on
   lowered code (Mend §18.2 still says Typed Core).
+- Ignore the diagnostic codes presented in the RFCs, they are not final.
 
 ## 5. Self-review checklist before finishing an RFC
 

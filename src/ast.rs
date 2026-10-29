@@ -58,7 +58,13 @@ pub(crate) struct AssignExpr<'ctx> {
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub(crate) enum Type {
     U8,
+    U16,
+    U32,
+    U64,
+    I8,
+    I16,
     I32,
+    I64,
     /// The type of an unsuffixed integer literal before its use decides it.
     IntLiteral,
     Unit,

@@ -169,7 +169,13 @@ impl<'ctx> CodeGen<'ctx> {
 fn scalar_type_of(ty: Type) -> ScalarType {
     match ty {
         Type::U8 => ScalarType::U8,
+        Type::U16 => ScalarType::U16,
+        Type::U32 => ScalarType::U32,
+        Type::U64 => ScalarType::U64,
+        Type::I8 => ScalarType::I8,
+        Type::I16 => ScalarType::I16,
         Type::I32 => ScalarType::I32,
+        Type::I64 => ScalarType::I64,
         Type::IntLiteral | Type::Unit | Type::Never | Type::Function => {
             unreachable!("{ty:?} is not a scalar type")
         }
@@ -213,7 +219,13 @@ struct ScalarReg(usize);
 #[derive(Clone, Copy)]
 enum ScalarType {
     U8,
+    U16,
+    U32,
+    U64,
+    I8,
+    I16,
     I32,
+    I64,
 }
 
 impl fmt::Display for MbcProgram<'_> {
@@ -260,7 +272,13 @@ impl fmt::Display for ScalarType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ScalarType::U8 => write!(f, "u8"),
+            ScalarType::U16 => write!(f, "u16"),
+            ScalarType::U32 => write!(f, "u32"),
+            ScalarType::U64 => write!(f, "u64"),
+            ScalarType::I8 => write!(f, "i8"),
+            ScalarType::I16 => write!(f, "i16"),
             ScalarType::I32 => write!(f, "i32"),
+            ScalarType::I64 => write!(f, "i64"),
         }
     }
 }

@@ -104,3 +104,40 @@ fn test_integer_with_suffix() {
         |"#,
     );
 }
+
+#[test]
+fn test_integer_with_each_suffix() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    a := 1u16;
+        |    b := 2u32;
+        |    c := 3u64;
+        |    d := 4i8;
+        |    e := 5i16;
+        |    f := 6i32;
+        |    g := 7i64;
+        |    h := 8usize;
+        |    i := 9isize;
+        |}
+        |"#,
+    );
+
+    check(
+        program,
+        r#"
+        |fn @main () frame s:9 h:0
+        |    ldi.u16 s0, 1
+        |    ldi.u32 s1, 2
+        |    ldi.u64 s2, 3
+        |    ldi.i8 s3, 4
+        |    ldi.i16 s4, 5
+        |    ldi.i32 s5, 6
+        |    ldi.i64 s6, 7
+        |    ldi.u64 s7, 8
+        |    ldi.i64 s8, 9
+        |    ret
+        |end
+        |"#,
+    );
+}
