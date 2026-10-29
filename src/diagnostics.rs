@@ -58,6 +58,9 @@ pub(crate) enum Diag {
         found: TokenKind,
     },
     UnknownCharacter(char),
+    InvalidIntegerSuffix {
+        suffix: Symbol,
+    },
 }
 
 impl Diag {
@@ -70,6 +73,7 @@ impl Diag {
             Diag::MainDeclaredTwice => "E0005",
             Diag::BindingNotFound { .. } => "E0006",
             Diag::AssignToImmutableBinding { .. } => "E0007",
+            Diag::InvalidIntegerSuffix { .. } => "E0008",
         }
     }
 
@@ -90,6 +94,10 @@ impl Diag {
             }
             Diag::ExpectedExpression { found } => format!("expected expression, found {found}"),
             Diag::UnknownCharacter(ch) => format!("unknown character `{ch}`"),
+            Diag::InvalidIntegerSuffix { suffix } => format!(
+                "invalid suffix `{}` for integer literal",
+                ctx.resolve_symbol(*suffix)
+            ),
         }
     }
 }

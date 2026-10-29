@@ -91,7 +91,23 @@ impl<'ctx> Parser<'ctx> {
 
         match parse_numeric_constant(lexeme).num_const {
             NumConst::Int(integer) => {
-                let suffix = integer.suffix.map(get_type_name_from_str);
+                let suffix = match integer.suffix {
+                    Some(suffix) => match get_type_name_from_str(suffix) {
+                        Some(ty) => Some(ty),
+                        None => {
+                            let suffix_symbol = self.ctx.get_or_intern_str(suffix);
+
+                            return Err(Diagnostic::builder(Diag::InvalidIntegerSuffix {
+                                suffix: suffix_symbol,
+                            })
+                            .label(tok.span, format!("invalid suffix `{suffix}`"))
+                            .help("the suffix must be an integer type, such as `u8`, `i32` or `usize`")
+                            .build()
+                            .into());
+                        }
+                    },
+                    None => None,
+                };
 
                 Ok(self.sema.act_on_integer_constant(integer.value, suffix))
             }
@@ -173,9 +189,9 @@ impl<'ctx> Parser<'ctx> {
     fn parse_type(&mut self) -> Result<Type, DiagnosticBag> {
         let ident_tok = self.expect_and_consume_tok(TokenKind::Identifier)?;
 
-        Ok(get_type_name_from_str(
-            self.ctx.get_source_map().get_text_snippet(ident_tok.span),
-        ))
+        let type_name = self.ctx.get_source_map().get_text_snippet(ident_tok.span);
+
+        Ok(get_type_name_from_str(type_name).unwrap_or_else(|| todo!("unknown type names")))
     }
 
     fn parse_return_expr(&mut self) -> Result<Expr<'ctx>, DiagnosticBag> {
@@ -273,8 +289,8 @@ impl<'ctx> Parser<'ctx> {
     }
 }
 
-fn get_type_name_from_str(name: &str) -> Type {
-    match name {
+fn get_type_name_from_str(name: &str) -> Option<Type> {
+    let ty = match name {
         "u8" => Type::U8,
         "u16" => Type::U16,
         "u32" => Type::U32,
@@ -283,6 +299,8 @@ fn get_type_name_from_str(name: &str) -> Type {
         "i16" => Type::I16,
         "i32" => Type::I32,
         "i64" | "isize" => Type::I64,
-        _ => todo!("other types"),
-    }
+        _ => return None,
+    };
+
+    Some(ty)
 }

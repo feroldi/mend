@@ -1,4 +1,4 @@
-use crate::tests::{check, compile};
+use crate::tests::{check, check_fail, compile};
 
 #[test]
 fn test_hexadecimal_integer() {
@@ -138,6 +138,29 @@ fn test_integer_with_each_suffix() {
         |    ldi.i64 s8, 9
         |    ret
         |end
+        |"#,
+    );
+}
+
+#[test]
+fn test_integer_with_unknown_suffix() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 42u7;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0008]: invalid suffix `u7` for integer literal
+        | --> <source>:2:10
+        |  |
+        |2 |     x := 42u7;
+        |  |          ^^^^ invalid suffix `u7`
+        |  = help: the suffix must be an integer type, such as `u8`, `i32` or `usize`
         |"#,
     );
 }
