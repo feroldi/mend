@@ -43,7 +43,7 @@ impl<'ctx> Scanner<'ctx> {
             '{' => TokenKind::Open(Delim::Curly),
             '}' => TokenKind::Closed(Delim::Curly),
             'a'..='z' | 'A'..='Z' | '_' => self.scan_identifier(span_start),
-            '0'..='9' => self.scan_numeric_constant(),
+            ch @ '0'..='9' => self.scan_numeric_constant(ch),
             ch => {
                 let span = Span {
                     start: span_start,
@@ -90,21 +90,35 @@ impl<'ctx> Scanner<'ctx> {
         }
     }
 
-    fn scan_numeric_constant(&mut self) -> TokenKind {
-        self.bump_numeric_constant_chars();
+    fn scan_numeric_constant(&mut self, first_digit: char) -> TokenKind {
+        let is_decimal = !(first_digit == '0' && matches!(self.peek(), 'x' | 'b' | 'o'));
+
+        self.bump_numeric_constant_chars(is_decimal, first_digit);
 
         // A `.` is part of the literal only if a digit follows it, so that `0..10` is a range.
         if self.peek() == '.' && self.char_stream.lookahead(1).is_ascii_digit() {
-            self.bump();
-            self.bump_numeric_constant_chars();
+            let period_ch = self.bump();
+            self.bump_numeric_constant_chars(is_decimal, period_ch);
         }
 
         TokenKind::NumericConstant
     }
 
-    fn bump_numeric_constant_chars(&mut self) {
+    fn bump_numeric_constant_chars(&mut self, is_decimal: bool, mut prev_char: char) {
         while matches!(self.peek(), 'a'..='z' | 'A'..='Z' | '_' | '0'..='9') {
-            self.bump();
+            let ch = self.bump();
+
+            // The sign of an exponent is part of the literal, as in `2.0e-3`. The `e` must follow
+            // a digit, so that `8usize-1` is a subtraction.
+            if is_decimal
+                && matches!(ch, 'e' | 'E')
+                && prev_char.is_ascii_digit()
+                && matches!(self.peek(), '+' | '-')
+            {
+                self.bump();
+            }
+
+            prev_char = ch;
         }
     }
 

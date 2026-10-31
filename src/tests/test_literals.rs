@@ -370,3 +370,26 @@ fn test_float() {
         |"#,
     );
 }
+
+#[test]
+fn test_float_with_exponent() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 2.0e-3;
+        |}
+        |"#,
+    );
+
+    check(
+        program,
+        r#"
+        |k0 = 0.002f64
+        |
+        |fn @main () frame s:1 h:0
+        |    ldk.f64 s0, k0
+        |    ret
+        |end
+        |"#,
+    );
+}
