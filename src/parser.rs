@@ -150,6 +150,7 @@ impl<'ctx> Parser<'ctx> {
                     tok.span,
                 )
             }
+            NumConst::Float(float) => Ok(self.sema.act_on_float_constant(float.value)),
         }
     }
 

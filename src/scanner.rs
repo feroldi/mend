@@ -91,11 +91,21 @@ impl<'ctx> Scanner<'ctx> {
     }
 
     fn scan_numeric_constant(&mut self) -> TokenKind {
-        while matches!(self.peek(), 'a'..='z' | 'A'..='Z' | '_' | '0'..='9') {
+        self.bump_numeric_constant_chars();
+
+        // A `.` is part of the literal only if a digit follows it, so that `0..10` is a range.
+        if self.peek() == '.' && self.char_stream.lookahead(1).is_ascii_digit() {
             self.bump();
+            self.bump_numeric_constant_chars();
         }
 
         TokenKind::NumericConstant
+    }
+
+    fn bump_numeric_constant_chars(&mut self) {
+        while matches!(self.peek(), 'a'..='z' | 'A'..='Z' | '_' | '0'..='9') {
+            self.bump();
+        }
     }
 
     fn peek(&mut self) -> char {

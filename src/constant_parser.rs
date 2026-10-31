@@ -1,6 +1,12 @@
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Debug)]
 pub(crate) enum NumConst<'a> {
     Int(IntegerConst<'a>),
+    Float(FloatConst),
+}
+
+#[derive(PartialEq, Debug)]
+pub(crate) struct FloatConst {
+    pub(crate) value: f64,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -15,6 +21,10 @@ pub(crate) struct IntegerConst<'a> {
 }
 
 pub(crate) fn parse_numeric_constant(token_lexeme: &str) -> NumConst<'_> {
+    if token_lexeme.contains('.') {
+        return NumConst::Float(parse_float_constant(token_lexeme));
+    }
+
     let attrs = parse_num_const_attributes(token_lexeme);
     let suffix = attrs.suffix;
     let radix = attrs.radix;
@@ -37,6 +47,14 @@ pub(crate) fn parse_numeric_constant(token_lexeme: &str) -> NumConst<'_> {
         has_no_digits,
         invalid_digit_offset,
     })
+}
+
+fn parse_float_constant(token_lexeme: &str) -> FloatConst {
+    let digits = token_lexeme.replace('_', "");
+
+    FloatConst {
+        value: digits.parse().unwrap(),
+    }
 }
 
 struct NumConstAttrs<'a> {

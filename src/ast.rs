@@ -40,6 +40,9 @@ pub(crate) enum Const {
         has_overflowed: bool,
         span: Span,
     },
+    Float {
+        value: f64,
+    },
 }
 
 #[derive(Clone, Copy)]
@@ -71,6 +74,7 @@ pub(crate) enum Type {
     I16,
     I32,
     I64,
+    F64,
     /// The type of an unsuffixed integer literal before its use decides it.
     IntLiteral,
     Unit,
@@ -93,7 +97,7 @@ impl Type {
             Type::I16 => (i16::MIN as i64, i16::MAX as u64),
             Type::I32 => (i32::MIN as i64, i32::MAX as u64),
             Type::I64 => (i64::MIN, i64::MAX as u64),
-            Type::IntLiteral | Type::Unit | Type::Never | Type::Function => unreachable!(),
+            _ => unreachable!(),
         };
 
         bounds
@@ -125,6 +129,7 @@ impl fmt::Display for Type {
             Type::I16 => write!(f, "i16"),
             Type::I32 => write!(f, "i32"),
             Type::I64 => write!(f, "i64"),
+            Type::F64 => write!(f, "f64"),
             Type::IntLiteral => write!(f, "{{integer}}"),
             Type::Unit => write!(f, "()"),
             Type::Never => write!(f, "!"),

@@ -67,6 +67,13 @@ impl<'ctx> Sema<'ctx> {
         })
     }
 
+    pub(crate) fn act_on_float_constant(&mut self, value: f64) -> Expr<'ctx> {
+        Expr {
+            kind: ExprKind::Const(Const::Float { value }),
+            ty: Type::F64,
+        }
+    }
+
     pub(crate) fn act_on_bind_def(
         &mut self,
         bind_def: BindDef<'ctx>,

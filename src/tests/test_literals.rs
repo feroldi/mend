@@ -347,3 +347,26 @@ fn test_hexadecimal_integer_missing_digits() {
         |"#,
     );
 }
+
+#[test]
+fn test_float() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 1.5;
+        |}
+        |"#,
+    );
+
+    check(
+        program,
+        r#"
+        |k0 = 1.5f64
+        |
+        |fn @main () frame s:1 h:0
+        |    ldk.f64 s0, k0
+        |    ret
+        |end
+        |"#,
+    );
+}

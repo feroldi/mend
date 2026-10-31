@@ -11,6 +11,7 @@ use crate::interner::Symbol;
 pub(crate) struct CodeGen<'ctx> {
     ctx: &'ctx CompilerContext,
     emitted_insts: Vec<Inst>,
+    scalar_consts: Vec<ScalarConst>,
     scalar_frame_size: usize,
     scope_stack: Vec<HashMap<Symbol, Binding>>,
 }
@@ -20,6 +21,7 @@ impl<'ctx> CodeGen<'ctx> {
         CodeGen {
             ctx,
             emitted_insts: vec![],
+            scalar_consts: vec![],
             scalar_frame_size: 0,
             scope_stack: vec![],
         }
@@ -34,6 +36,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         MbcProgram {
             ctx: self.ctx,
+            scalar_consts: std::mem::take(&mut self.scalar_consts),
             functions,
         }
     }
@@ -90,7 +93,19 @@ impl<'ctx> CodeGen<'ctx> {
                 dest,
                 imm: value as i32,
             }),
+            Const::Float { value } => {
+                let index = self.add_scalar_const(ScalarConst::F64(value));
+
+                self.emit(Inst::Ldk { ty, dest, index });
+            }
         }
+    }
+
+    fn add_scalar_const(&mut self, constant: ScalarConst) -> ScalarConstIndex {
+        let index = ScalarConstIndex(self.scalar_consts.len());
+        self.scalar_consts.push(constant);
+
+        index
     }
 
     fn gen_bind_def_expr(&mut self, bind_def: BindDef) {
@@ -176,6 +191,7 @@ fn scalar_type_of(ty: Type) -> ScalarType {
         Type::I16 => ScalarType::I16,
         Type::I32 => ScalarType::I32,
         Type::I64 => ScalarType::I64,
+        Type::F64 => ScalarType::F64,
         Type::IntLiteral | Type::Unit | Type::Never | Type::Function => {
             unreachable!("{ty:?} is not a scalar type")
         }
@@ -189,7 +205,13 @@ struct Binding {
 
 pub(crate) struct MbcProgram<'ctx> {
     ctx: &'ctx CompilerContext,
+    scalar_consts: Vec<ScalarConst>,
     functions: Vec<MbcFunction>,
+}
+
+#[derive(Clone, Copy)]
+enum ScalarConst {
+    F64(f64),
 }
 
 struct MbcFunction {
@@ -206,6 +228,11 @@ enum Inst {
         dest: ScalarReg,
         imm: i32,
     },
+    Ldk {
+        ty: ScalarType,
+        dest: ScalarReg,
+        index: ScalarConstIndex,
+    },
     Mov {
         dest: ScalarReg,
         source: ScalarReg,
@@ -217,6 +244,9 @@ enum Inst {
 struct ScalarReg(usize);
 
 #[derive(Clone, Copy)]
+struct ScalarConstIndex(usize);
+
+#[derive(Clone, Copy)]
 enum ScalarType {
     U8,
     U16,
@@ -226,10 +256,15 @@ enum ScalarType {
     I16,
     I32,
     I64,
+    F64,
 }
 
 impl fmt::Display for MbcProgram<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (index, constant) in self.scalar_consts.iter().enumerate() {
+            writeln!(f, "{} = {}", ScalarConstIndex(index), constant)?;
+        }
+
         for function in &self.functions {
             writeln!(
                 f,
@@ -256,6 +291,7 @@ impl fmt::Display for Inst {
             Inst::Ldi { ty, dest, imm } => {
                 write!(f, "ldi.{ty} {dest}, {imm}")
             }
+            Inst::Ldk { ty, dest, index } => write!(f, "ldk.{ty} {dest}, {index}"),
             Inst::Mov { dest, source } => write!(f, "mov {dest}, {source}"),
             Inst::Ret => write!(f, "ret"),
         }
@@ -265,6 +301,20 @@ impl fmt::Display for Inst {
 impl fmt::Display for ScalarReg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "s{}", self.0)
+    }
+}
+
+impl fmt::Display for ScalarConstIndex {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "k{}", self.0)
+    }
+}
+
+impl fmt::Display for ScalarConst {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ScalarConst::F64(value) => write!(f, "{value:?}f64"),
+        }
     }
 }
 
@@ -279,6 +329,7 @@ impl fmt::Display for ScalarType {
             ScalarType::I16 => write!(f, "i16"),
             ScalarType::I32 => write!(f, "i32"),
             ScalarType::I64 => write!(f, "i64"),
+            ScalarType::F64 => write!(f, "f64"),
         }
     }
 }
