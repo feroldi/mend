@@ -393,3 +393,26 @@ fn test_float_with_exponent() {
         |"#,
     );
 }
+
+#[test]
+fn test_float_with_exponent_and_no_fraction() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 1e3;
+        |}
+        |"#,
+    );
+
+    check(
+        program,
+        r#"
+        |k0 = 1000.0f64
+        |
+        |fn @main () frame s:1 h:0
+        |    ldk.f64 s0, k0
+        |    ret
+        |end
+        |"#,
+    );
+}

@@ -21,7 +21,7 @@ pub(crate) struct IntegerConst<'a> {
 }
 
 pub(crate) fn parse_numeric_constant(token_lexeme: &str) -> NumConst<'_> {
-    if token_lexeme.contains('.') {
+    if token_lexeme.contains('.') || has_exponent(token_lexeme) {
         return NumConst::Float(parse_float_constant(token_lexeme));
     }
 
@@ -47,6 +47,18 @@ pub(crate) fn parse_numeric_constant(token_lexeme: &str) -> NumConst<'_> {
         has_no_digits,
         invalid_digit_offset,
     })
+}
+
+fn has_exponent(token_lexeme: &str) -> bool {
+    if matches!(token_lexeme.as_bytes(), [b'0', b'x' | b'b' | b'o', ..]) {
+        return false;
+    }
+
+    let mut chars_after_digits = token_lexeme
+        .bytes()
+        .skip_while(|&ch| ch == b'_' || ch.is_ascii_digit());
+
+    matches!(chars_after_digits.next(), Some(b'e' | b'E'))
 }
 
 fn parse_float_constant(token_lexeme: &str) -> FloatConst {
