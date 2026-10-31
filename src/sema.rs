@@ -67,10 +67,10 @@ impl<'ctx> Sema<'ctx> {
         })
     }
 
-    pub(crate) fn act_on_float_constant(&mut self, value: f64) -> Expr<'ctx> {
+    pub(crate) fn act_on_float_constant(&mut self, value: f64, suffix: Option<Type>) -> Expr<'ctx> {
         Expr {
             kind: ExprKind::Const(Const::Float { value }),
-            ty: Type::F64,
+            ty: suffix.unwrap_or(Type::F64),
         }
     }
 

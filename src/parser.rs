@@ -127,8 +127,8 @@ impl<'ctx> Parser<'ctx> {
 
                 let suffix = match integer.suffix {
                     Some(suffix) => match get_type_name_from_str(suffix) {
-                        Some(ty) => Some(ty),
-                        None => {
+                        Some(ty) if ty.is_integer_type() => Some(ty),
+                        _ => {
                             let suffix_symbol = self.ctx.get_or_intern_str(suffix);
 
                             return Err(Diagnostic::builder(Diag::InvalidIntegerSuffix {
@@ -150,7 +150,11 @@ impl<'ctx> Parser<'ctx> {
                     tok.span,
                 )
             }
-            NumConst::Float(float) => Ok(self.sema.act_on_float_constant(float.value)),
+            NumConst::Float(float) => {
+                let suffix = float.suffix.and_then(get_type_name_from_str);
+
+                Ok(self.sema.act_on_float_constant(float.value, suffix))
+            }
         }
     }
 
@@ -339,6 +343,8 @@ fn get_type_name_from_str(name: &str) -> Option<Type> {
         "i16" => Type::I16,
         "i32" => Type::I32,
         "i64" | "isize" => Type::I64,
+        "f32" => Type::F32,
+        "f64" => Type::F64,
         _ => return None,
     };
 

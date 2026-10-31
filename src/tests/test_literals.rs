@@ -416,3 +416,26 @@ fn test_float_with_exponent_and_no_fraction() {
         |"#,
     );
 }
+
+#[test]
+fn test_float_with_suffix() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 1f32;
+        |}
+        |"#,
+    );
+
+    check(
+        program,
+        r#"
+        |k0 = 1.0f32
+        |
+        |fn @main () frame s:1 h:0
+        |    ldk.f32 s0, k0
+        |    ret
+        |end
+        |"#,
+    );
+}

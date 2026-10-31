@@ -1,12 +1,13 @@
 #[derive(PartialEq, Debug)]
 pub(crate) enum NumConst<'a> {
     Int(IntegerConst<'a>),
-    Float(FloatConst),
+    Float(FloatConst<'a>),
 }
 
 #[derive(PartialEq, Debug)]
-pub(crate) struct FloatConst {
+pub(crate) struct FloatConst<'a> {
     pub(crate) value: f64,
+    pub(crate) suffix: Option<&'a str>,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -21,7 +22,7 @@ pub(crate) struct IntegerConst<'a> {
 }
 
 pub(crate) fn parse_numeric_constant(token_lexeme: &str) -> NumConst<'_> {
-    if token_lexeme.contains('.') || has_exponent(token_lexeme) {
+    if token_lexeme.contains('.') || has_exponent(token_lexeme) || has_float_suffix(token_lexeme) {
         return NumConst::Float(parse_float_constant(token_lexeme));
     }
 
@@ -61,12 +62,34 @@ fn has_exponent(token_lexeme: &str) -> bool {
     matches!(chars_after_digits.next(), Some(b'e' | b'E'))
 }
 
-fn parse_float_constant(token_lexeme: &str) -> FloatConst {
-    let digits = token_lexeme.replace('_', "");
-
-    FloatConst {
-        value: digits.parse().unwrap(),
+fn has_float_suffix(token_lexeme: &str) -> bool {
+    if matches!(token_lexeme.as_bytes(), [b'0', b'x' | b'b' | b'o', ..]) {
+        return false;
     }
+
+    let suffix = token_lexeme.trim_start_matches(|ch: char| ch == '_' || ch.is_ascii_digit());
+
+    matches!(suffix, "f32" | "f64")
+}
+
+fn parse_float_constant(token_lexeme: &str) -> FloatConst<'_> {
+    let (digits, suffix) = match token_lexeme.len().checked_sub(3) {
+        Some(suffix_start) if matches!(&token_lexeme[suffix_start..], "f32" | "f64") => (
+            &token_lexeme[..suffix_start],
+            Some(&token_lexeme[suffix_start..]),
+        ),
+        _ => (token_lexeme, None),
+    };
+
+    let digits = digits.replace('_', "");
+
+    // Parsing an `f32` directly avoids the double rounding of parsing an `f64` and narrowing it.
+    let value = match suffix {
+        Some("f32") => digits.parse::<f32>().unwrap() as f64,
+        _ => digits.parse().unwrap(),
+    };
+
+    FloatConst { value, suffix }
 }
 
 struct NumConstAttrs<'a> {

@@ -74,6 +74,7 @@ pub(crate) enum Type {
     I16,
     I32,
     I64,
+    F32,
     F64,
     /// The type of an unsuffixed integer literal before its use decides it.
     IntLiteral,
@@ -129,6 +130,7 @@ impl fmt::Display for Type {
             Type::I16 => write!(f, "i16"),
             Type::I32 => write!(f, "i32"),
             Type::I64 => write!(f, "i64"),
+            Type::F32 => write!(f, "f32"),
             Type::F64 => write!(f, "f64"),
             Type::IntLiteral => write!(f, "{{integer}}"),
             Type::Unit => write!(f, "()"),

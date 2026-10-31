@@ -94,7 +94,11 @@ impl<'ctx> CodeGen<'ctx> {
                 imm: value as i32,
             }),
             Const::Float { value } => {
-                let index = self.add_scalar_const(ScalarConst::F64(value));
+                let constant = match ty {
+                    ScalarType::F32 => ScalarConst::F32(value as f32),
+                    _ => ScalarConst::F64(value),
+                };
+                let index = self.add_scalar_const(constant);
 
                 self.emit(Inst::Ldk { ty, dest, index });
             }
@@ -191,6 +195,7 @@ fn scalar_type_of(ty: Type) -> ScalarType {
         Type::I16 => ScalarType::I16,
         Type::I32 => ScalarType::I32,
         Type::I64 => ScalarType::I64,
+        Type::F32 => ScalarType::F32,
         Type::F64 => ScalarType::F64,
         Type::IntLiteral | Type::Unit | Type::Never | Type::Function => {
             unreachable!("{ty:?} is not a scalar type")
@@ -211,6 +216,7 @@ pub(crate) struct MbcProgram<'ctx> {
 
 #[derive(Clone, Copy)]
 enum ScalarConst {
+    F32(f32),
     F64(f64),
 }
 
@@ -256,6 +262,7 @@ enum ScalarType {
     I16,
     I32,
     I64,
+    F32,
     F64,
 }
 
@@ -313,6 +320,7 @@ impl fmt::Display for ScalarConstIndex {
 impl fmt::Display for ScalarConst {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ScalarConst::F32(value) => write!(f, "{value:?}f32"),
             ScalarConst::F64(value) => write!(f, "{value:?}f64"),
         }
     }
@@ -329,6 +337,7 @@ impl fmt::Display for ScalarType {
             ScalarType::I16 => write!(f, "i16"),
             ScalarType::I32 => write!(f, "i32"),
             ScalarType::I64 => write!(f, "i64"),
+            ScalarType::F32 => write!(f, "f32"),
             ScalarType::F64 => write!(f, "f64"),
         }
     }
