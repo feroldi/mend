@@ -1,6 +1,6 @@
 use crate::ast::*;
 use crate::compiler_context::CompilerContext;
-use crate::constant_parser::{NumConst, parse_numeric_constant};
+use crate::constant_parser::{parse_float_constant, parse_integer_constant};
 use crate::diagnostics::{Diag, Diagnostic, DiagnosticBag};
 use crate::scanner::{Delim, Keyword, Scanner, Token, TokenKind};
 use crate::sema::Sema;
@@ -60,7 +60,8 @@ impl<'ctx> Parser<'ctx> {
         let tok = self.consume_tok()?;
 
         match tok.kind {
-            TokenKind::NumericConstant => self.parse_numeric_constant(tok),
+            TokenKind::IntegerConstant => self.parse_integer_constant(tok),
+            TokenKind::FloatConstant => self.parse_float_constant(tok),
             TokenKind::Identifier => self.parse_identifier_expr(tok),
             TokenKind::Keyword(Keyword::Mut) => self.parse_mut_bind_def_expr(),
             TokenKind::Keyword(Keyword::Return) => self.parse_return_expr(),
@@ -87,75 +88,82 @@ impl<'ctx> Parser<'ctx> {
         }
     }
 
-    fn parse_numeric_constant(&mut self, tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
+    fn parse_integer_constant(&mut self, tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
         let lexeme = self.ctx.get_source_map().get_text_snippet(tok.span);
+        let integer = parse_integer_constant(lexeme);
 
-        match parse_numeric_constant(lexeme) {
-            NumConst::Int(integer) => {
-                if integer.has_no_digits {
-                    // Decimals by definition don't have a prefix, and so they can only exist if at
-                    // least one digit exists. So, only prefixed integers can miss digits.
-                    let prefix = &lexeme[..2];
+        if integer.has_no_digits {
+            // Decimals by definition don't have a base prefix, and so they can only exist if at
+            // least one digit exists. So, only prefixed integers can miss digits.
+            let prefix = &lexeme[..2];
 
-                    return Err(Diagnostic::builder(Diag::IntegerMissingDigits {
-                        radix: integer.radix,
-                    })
-                    .label(
-                        tok.span,
-                        format!("expected at least one digit after `{prefix}`"),
-                    )
-                    .build()
-                    .into());
-                }
-
-                if let Some(invalid_digit_offset) = integer.invalid_digit_offset {
-                    let start = tok.span.start + BytePos::from_usize(invalid_digit_offset);
-                    let digit_span = Span {
-                        start,
-                        end: start + BytePos::from_usize(1),
-                    };
-                    let digit = lexeme[invalid_digit_offset..].chars().next().unwrap();
-
-                    return Err(Diagnostic::builder(Diag::InvalidDigit {
-                        digit,
-                        radix: integer.radix,
-                    })
-                    .label(digit_span, "invalid digit")
-                    .build()
-                    .into());
-                }
-
-                let suffix = match integer.suffix {
-                    Some(suffix) => match get_type_name_from_str(suffix) {
-                        Some(ty) if ty.is_integer_type() => Some(ty),
-                        _ => {
-                            let suffix_symbol = self.ctx.get_or_intern_str(suffix);
-
-                            return Err(Diagnostic::builder(Diag::InvalidIntegerSuffix {
-                                suffix: suffix_symbol,
-                            })
-                            .label(tok.span, format!("invalid suffix `{suffix}`"))
-                            .help("the suffix must be an integer type, such as `u8`, `i32` or `usize`")
-                            .build()
-                            .into());
-                        }
-                    },
-                    None => None,
-                };
-
-                self.sema.act_on_integer_constant(
-                    integer.value,
-                    integer.has_overflowed,
-                    suffix,
-                    tok.span,
-                )
-            }
-            NumConst::Float(float) => {
-                let suffix = float.suffix.and_then(get_type_name_from_str);
-
-                Ok(self.sema.act_on_float_constant(float.value, suffix))
-            }
+            return Err(Diagnostic::builder(Diag::IntegerMissingDigits {
+                radix: integer.radix,
+            })
+            .label(
+                tok.span,
+                format!("expected at least one digit after `{prefix}`"),
+            )
+            .build()
+            .into());
         }
+
+        if let Some(invalid_digit_offset) = integer.invalid_digit_offset {
+            let start = tok.span.start + BytePos::from_usize(invalid_digit_offset);
+            let digit_span = Span {
+                start,
+                end: start + BytePos::from_usize(1),
+            };
+            let digit = lexeme[invalid_digit_offset..].chars().next().unwrap();
+
+            return Err(Diagnostic::builder(Diag::InvalidDigit {
+                digit,
+                radix: integer.radix,
+            })
+            .label(digit_span, "invalid digit")
+            .build()
+            .into());
+        }
+
+        let suffix = match integer.suffix {
+            Some(suffix) => match get_type_name_from_str(suffix) {
+                Some(ty) if ty.is_integer_type() => Some(ty),
+                _ => {
+                    let suffix_symbol = self.ctx.get_or_intern_str(suffix);
+
+                    return Err(Diagnostic::builder(Diag::InvalidIntegerSuffix {
+                        suffix: suffix_symbol,
+                    })
+                    .label(tok.span, format!("invalid suffix `{suffix}`"))
+                    .help("the suffix must be an integer type, such as `u8`, `i32` or `usize`")
+                    .build()
+                    .into());
+                }
+            },
+            None => None,
+        };
+
+        self.sema
+            .act_on_integer_constant(integer.value, integer.has_overflowed, suffix, tok.span)
+    }
+
+    fn parse_float_constant(&mut self, tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
+        let lexeme = self.ctx.get_source_map().get_text_snippet(tok.span);
+        let float = parse_float_constant(lexeme);
+        let suffix = float.suffix.and_then(get_type_name_from_str);
+
+        let value = match suffix {
+            Some(Type::F32) => FloatValue::F32(float.to_f32()),
+            _ => FloatValue::F64(float.to_f64()),
+        };
+
+        Ok(self.sema.act_on_float_constant(
+            Const::Float {
+                value,
+                span: tok.span,
+            },
+            suffix,
+        ))
     }
 
     fn parse_identifier_expr(&mut self, ident_tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {

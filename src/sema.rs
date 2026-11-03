@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    AssignExpr, BindDef, BindRef, CompoundExpr, Const, Expr, ExprKind, Function, Program, Type,
+    AssignExpr, BindDef, BindRef, CompoundExpr, Const, Expr, ExprKind, FloatValue, Function,
+    Program, Type,
 };
 use crate::compiler_context::CompilerContext;
+use crate::constant_parser::parse_float_constant;
 use crate::diagnostics::{Diag, Diagnostic, DiagnosticBag};
 use crate::interner::Symbol;
 use crate::source_map::Span;
@@ -67,10 +69,14 @@ impl<'ctx> Sema<'ctx> {
         })
     }
 
-    pub(crate) fn act_on_float_constant(&mut self, value: f64, suffix: Option<Type>) -> Expr<'ctx> {
+    pub(crate) fn act_on_float_constant(
+        &mut self,
+        constant: Const,
+        suffix: Option<Type>,
+    ) -> Expr<'ctx> {
         Expr {
-            kind: ExprKind::Const(Const::Float { value }),
-            ty: suffix.unwrap_or(Type::F64),
+            kind: ExprKind::Const(constant),
+            ty: suffix.unwrap_or(Type::FloatLiteral),
         }
     }
 
@@ -178,6 +184,30 @@ impl<'ctx> Sema<'ctx> {
         expr: Expr<'ctx>,
         expected_ty: Option<Type>,
     ) -> Result<Expr<'ctx>, DiagnosticBag> {
+        if expr.ty == Type::FloatLiteral {
+            let ExprKind::Const(Const::Float { span, .. }) = expr.kind else {
+                unreachable!("only float literals have type {}", Type::FloatLiteral);
+            };
+
+            return Ok(match expected_ty {
+                Some(Type::F32) => {
+                    let lexeme = self.ctx.get_source_map().get_text_snippet(span);
+
+                    Expr {
+                        kind: ExprKind::Const(Const::Float {
+                            value: FloatValue::F32(parse_float_constant(lexeme).to_f32()),
+                            span,
+                        }),
+                        ty: Type::F32,
+                    }
+                }
+                ty => Expr {
+                    ty: ty.unwrap_or(Type::F64),
+                    ..expr
+                },
+            });
+        }
+
         if expr.ty != Type::IntLiteral {
             return Ok(expr);
         }

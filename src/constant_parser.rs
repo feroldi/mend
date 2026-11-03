@@ -1,15 +1,3 @@
-#[derive(PartialEq, Debug)]
-pub(crate) enum NumConst<'a> {
-    Int(IntegerConst<'a>),
-    Float(FloatConst<'a>),
-}
-
-#[derive(PartialEq, Debug)]
-pub(crate) struct FloatConst<'a> {
-    pub(crate) value: f64,
-    pub(crate) suffix: Option<&'a str>,
-}
-
 #[derive(PartialEq, Eq, Debug)]
 pub(crate) struct IntegerConst<'a> {
     pub(crate) value: u64,
@@ -21,120 +9,100 @@ pub(crate) struct IntegerConst<'a> {
     pub(crate) invalid_digit_offset: Option<usize>,
 }
 
-pub(crate) fn parse_numeric_constant(token_lexeme: &str) -> NumConst<'_> {
-    if token_lexeme.contains('.') || has_exponent(token_lexeme) || has_float_suffix(token_lexeme) {
-        return NumConst::Float(parse_float_constant(token_lexeme));
+#[derive(PartialEq, Eq, Debug)]
+pub(crate) struct FloatConst<'a> {
+    /// The integer part, fraction and exponent, without the suffix.
+    digits: &'a str,
+    pub(crate) suffix: Option<&'a str>,
+}
+
+impl FloatConst<'_> {
+    pub(crate) fn to_f32(&self) -> f32 {
+        self.digits.replace('_', "").parse().unwrap()
     }
 
-    let attrs = parse_num_const_attributes(token_lexeme);
-    let suffix = attrs.suffix;
-    let radix = attrs.radix;
-
-    let has_no_digits = attrs.digits.is_empty() || attrs.digits.iter().all(|&ch| ch == b'_');
-
-    let invalid_digit_offset = attrs
-        .digits
-        .iter()
-        .position(|&ch| ch != b'_' && !(ch as char).is_digit(radix))
-        .map(|index| attrs.prefix_len + index);
-
-    let (value, has_overflowed) = eval_integer_constant(attrs);
-
-    NumConst::Int(IntegerConst {
-        value,
-        has_overflowed,
-        suffix,
-        radix,
-        has_no_digits,
-        invalid_digit_offset,
-    })
+    pub(crate) fn to_f64(&self) -> f64 {
+        self.digits.replace('_', "").parse().unwrap()
+    }
 }
 
-fn has_exponent(token_lexeme: &str) -> bool {
-    if matches!(token_lexeme.as_bytes(), [b'0', b'x' | b'b' | b'o', ..]) {
-        return false;
+pub(crate) fn parse_integer_constant(token_lexeme: &str) -> IntegerConst<'_> {
+    let mut cursor = Cursor::new(token_lexeme);
+
+    let radix = match (cursor.peek(), cursor.lookahead(1)) {
+        (Some(b'0'), Some(b'x')) => 16,
+        (Some(b'0'), Some(b'b')) => 2,
+        (Some(b'0'), Some(b'o')) => 8,
+        _ => 10,
+    };
+
+    if radix != 10 {
+        cursor.bump_n(2);
     }
 
-    let mut chars_after_digits = token_lexeme
-        .bytes()
-        .skip_while(|&ch| ch == b'_' || ch.is_ascii_digit());
-
-    matches!(chars_after_digits.next(), Some(b'e' | b'E'))
-}
-
-fn has_float_suffix(token_lexeme: &str) -> bool {
-    if matches!(token_lexeme.as_bytes(), [b'0', b'x' | b'b' | b'o', ..]) {
-        return false;
-    }
-
-    let suffix = token_lexeme.trim_start_matches(|ch: char| ch == '_' || ch.is_ascii_digit());
-
-    matches!(suffix, "f32" | "f64")
-}
-
-fn parse_float_constant(token_lexeme: &str) -> FloatConst<'_> {
-    let (digits, suffix) = match token_lexeme.len().checked_sub(3) {
-        Some(suffix_start) if matches!(&token_lexeme[suffix_start..], "f32" | "f64") => (
-            &token_lexeme[..suffix_start],
-            Some(&token_lexeme[suffix_start..]),
-        ),
-        _ => (token_lexeme, None),
-    };
-
-    let digits = digits.replace('_', "");
-
-    // Parsing an `f32` directly avoids the double rounding of parsing an `f64` and narrowing it.
-    let value = match suffix {
-        Some("f32") => digits.parse::<f32>().unwrap() as f64,
-        _ => digits.parse().unwrap(),
-    };
-
-    FloatConst { value, suffix }
-}
-
-struct NumConstAttrs<'a> {
-    radix: u32,
-    prefix_len: usize,
-    digits: &'a [u8],
-    suffix: Option<&'a str>,
-}
-
-fn parse_num_const_attributes(token_lexeme: &str) -> NumConstAttrs<'_> {
-    let (radix, prefix_len) = match token_lexeme.as_bytes() {
-        [b'0', b'x', ..] => (16, 2),
-        [b'0', b'b', ..] => (2, 2),
-        [b'0', b'o', ..] => (8, 2),
-        _ => (10, 0),
-    };
-
-    let digits_and_suffix = &token_lexeme[prefix_len..];
+    let digits_start = cursor.pos;
 
     // For binary and octal integers, read all the decimal digits, so that they can be reported as
     // invalid digits. In the case of hexadecimal, all digits are valid, so letters are reported as
     // invalid suffixes instead.
-    let digit_radix = radix.max(10) as u32;
+    let digit_radix = radix.max(10);
+    cursor.bump_while(|ch| ch == b'_' || (ch as char).is_digit(digit_radix));
 
-    let digits_len = digits_and_suffix
+    let digits = cursor.slice_from(digits_start);
+    let suffix = cursor.rest();
+
+    let has_no_digits = digits.bytes().all(|ch| ch == b'_');
+
+    let invalid_digit_offset = digits
         .bytes()
-        .take_while(|&ch| ch == b'_' || (ch as char).is_digit(digit_radix))
-        .count();
+        .position(|ch| ch != b'_' && !(ch as char).is_digit(radix))
+        .map(|index| digits_start + index);
 
-    let (digits, suffix) = digits_and_suffix.split_at(digits_len);
+    let (value, has_overflowed) = eval_integer_constant(digits, radix);
 
-    NumConstAttrs {
+    IntegerConst {
+        value,
+        has_overflowed,
+        suffix: (!suffix.is_empty()).then_some(suffix),
         radix,
-        prefix_len,
-        digits: digits.as_bytes(),
+        has_no_digits,
+        invalid_digit_offset,
+    }
+}
+
+pub(crate) fn parse_float_constant(token_lexeme: &str) -> FloatConst<'_> {
+    let mut cursor = Cursor::new(token_lexeme);
+
+    cursor.bump_while(is_decimal_digit);
+
+    if cursor.try_bump(|ch| ch == b'.') {
+        cursor.bump_while(is_decimal_digit);
+    }
+
+    if cursor.try_bump(|ch| matches!(ch, b'e' | b'E')) {
+        cursor.try_bump(|ch| matches!(ch, b'+' | b'-'));
+        cursor.bump_while(is_decimal_digit);
+    }
+
+    let digits = cursor.slice_from(0);
+    let suffix = cursor.rest();
+
+    FloatConst {
+        digits,
         suffix: (!suffix.is_empty()).then_some(suffix),
     }
 }
 
-fn eval_integer_constant(attrs: NumConstAttrs) -> (u64, bool) {
+fn is_decimal_digit(ch: u8) -> bool {
+    ch == b'_' || ch.is_ascii_digit()
+}
+
+fn eval_integer_constant(digits: &str, radix: u32) -> (u64, bool) {
     let mut value = 0u64;
     let mut has_overflowed = false;
-    let radix = attrs.radix as u64;
+    let radix = radix as u64;
 
-    for &digit in attrs.digits {
+    for digit in digits.bytes() {
         if digit == b'_' {
             continue;
         }
@@ -157,5 +125,51 @@ fn convert_digit_to_int(digit: u8) -> u64 {
         b'a'..=b'f' => (digit - b'a') as u64 + 10,
         b'A'..=b'F' => (digit - b'A') as u64 + 10,
         _ => unreachable!("should not convert '{}'", digit),
+    }
+}
+
+/// Walks a numeric lexeme byte by byte. Numeric lexemes are ASCII, so each byte is a character.
+struct Cursor<'a> {
+    text: &'a str,
+    pos: usize,
+}
+
+impl<'a> Cursor<'a> {
+    fn new(text: &'a str) -> Cursor<'a> {
+        Cursor { text, pos: 0 }
+    }
+
+    fn peek(&self) -> Option<u8> {
+        self.lookahead(0)
+    }
+
+    fn lookahead(&self, n: usize) -> Option<u8> {
+        self.text.as_bytes().get(self.pos + n).copied()
+    }
+
+    fn bump_n(&mut self, n: usize) {
+        self.pos += n;
+    }
+
+    fn try_bump(&mut self, pred: impl Fn(u8) -> bool) -> bool {
+        let is_bumped = self.peek().is_some_and(pred);
+
+        if is_bumped {
+            self.pos += 1;
+        }
+
+        is_bumped
+    }
+
+    fn bump_while(&mut self, pred: impl Fn(u8) -> bool) {
+        while self.try_bump(&pred) {}
+    }
+
+    fn slice_from(&self, start: usize) -> &'a str {
+        &self.text[start..self.pos]
+    }
+
+    fn rest(&self) -> &'a str {
+        &self.text[self.pos..]
     }
 }

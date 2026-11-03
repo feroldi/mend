@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::ast::{
-    AssignExpr, BindDef, BindRef, CompoundExpr, Const, Decl, Expr, ExprKind, Function, Program,
-    Type,
+    AssignExpr, BindDef, BindRef, CompoundExpr, Const, Decl, Expr, ExprKind, FloatValue, Function,
+    Program, Type,
 };
 use crate::compiler_context::CompilerContext;
 use crate::interner::Symbol;
@@ -93,10 +93,10 @@ impl<'ctx> CodeGen<'ctx> {
                 dest,
                 imm: value as i32,
             }),
-            Const::Float { value } => {
-                let constant = match ty {
-                    ScalarType::F32 => ScalarConst::F32(value as f32),
-                    _ => ScalarConst::F64(value),
+            Const::Float { value, .. } => {
+                let constant = match value {
+                    FloatValue::F32(value) => ScalarConst::F32(value),
+                    FloatValue::F64(value) => ScalarConst::F64(value),
                 };
                 let index = self.add_scalar_const(constant);
 
@@ -197,7 +197,7 @@ fn scalar_type_of(ty: Type) -> ScalarType {
         Type::I64 => ScalarType::I64,
         Type::F32 => ScalarType::F32,
         Type::F64 => ScalarType::F64,
-        Type::IntLiteral | Type::Unit | Type::Never | Type::Function => {
+        Type::IntLiteral | Type::FloatLiteral | Type::Unit | Type::Never | Type::Function => {
             unreachable!("{ty:?} is not a scalar type")
         }
     }

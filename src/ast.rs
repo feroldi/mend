@@ -41,8 +41,15 @@ pub(crate) enum Const {
         span: Span,
     },
     Float {
-        value: f64,
+        value: FloatValue,
+        span: Span,
     },
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum FloatValue {
+    F32(f32),
+    F64(f64),
 }
 
 #[derive(Clone, Copy)]
@@ -78,6 +85,8 @@ pub(crate) enum Type {
     F64,
     /// The type of an unsuffixed integer literal before its use decides it.
     IntLiteral,
+    /// The type of an unsuffixed float literal before its use decides it.
+    FloatLiteral,
     Unit,
     Never,
     /// The type of a function that takes no arguments and returns `()`.
@@ -133,6 +142,7 @@ impl fmt::Display for Type {
             Type::F32 => write!(f, "f32"),
             Type::F64 => write!(f, "f64"),
             Type::IntLiteral => write!(f, "{{integer}}"),
+            Type::FloatLiteral => write!(f, "{{float}}"),
             Type::Unit => write!(f, "()"),
             Type::Never => write!(f, "!"),
             Type::Function => write!(f, "() -> ()"),

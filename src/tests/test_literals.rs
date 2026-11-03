@@ -439,3 +439,26 @@ fn test_float_with_suffix() {
         |"#,
     );
 }
+
+#[test]
+fn test_annotated_float() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x: f32 = 1.5;
+        |}
+        |"#,
+    );
+
+    check(
+        program,
+        r#"
+        |k0 = 1.5f32
+        |
+        |fn @main () frame s:1 h:0
+        |    ldk.f32 s0, k0
+        |    ret
+        |end
+        |"#,
+    );
+}

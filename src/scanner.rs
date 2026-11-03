@@ -93,33 +93,42 @@ impl<'ctx> Scanner<'ctx> {
     fn scan_numeric_constant(&mut self, first_digit: char) -> TokenKind {
         let is_decimal = !(first_digit == '0' && matches!(self.peek(), 'x' | 'b' | 'o'));
 
-        self.bump_numeric_constant_chars(is_decimal, first_digit);
+        let mut is_float = self.bump_numeric_constant_chars(is_decimal, first_digit);
 
         // A `.` is part of the literal only if a digit follows it, so that `0..10` is a range.
         if self.peek() == '.' && self.char_stream.lookahead(1).is_ascii_digit() {
             let period_ch = self.bump();
-            self.bump_numeric_constant_chars(is_decimal, period_ch);
+            is_float |= is_decimal;
+            is_float |= self.bump_numeric_constant_chars(is_decimal, period_ch);
         }
 
-        TokenKind::NumericConstant
+        if is_float {
+            TokenKind::FloatConstant
+        } else {
+            TokenKind::IntegerConstant
+        }
     }
 
-    fn bump_numeric_constant_chars(&mut self, is_decimal: bool, mut prev_char: char) {
+    /// Returns whether the chars have an exponent or a float suffix, which make a decimal literal
+    /// a float.
+    fn bump_numeric_constant_chars(&mut self, is_decimal: bool, mut prev_char: char) -> bool {
+        let mut is_float = false;
+
         while matches!(self.peek(), 'a'..='z' | 'A'..='Z' | '_' | '0'..='9') {
             let ch = self.bump();
 
-            // The sign of an exponent is part of the literal, as in `2.0e-3`. The `e` must follow
-            // a digit, so that `8usize-1` is a subtraction.
-            if is_decimal
-                && matches!(ch, 'e' | 'E')
-                && prev_char.is_ascii_digit()
-                && matches!(self.peek(), '+' | '-')
-            {
-                self.bump();
+            if is_decimal && matches!(ch, 'e' | 'E' | 'f') && matches!(prev_char, '0'..='9' | '_') {
+                is_float = true;
+
+                if ch != 'f' && matches!(self.peek(), '+' | '-') {
+                    self.bump();
+                }
             }
 
             prev_char = ch;
         }
+
+        is_float
     }
 
     fn peek(&mut self) -> char {
@@ -141,7 +150,8 @@ pub(crate) struct Token {
 pub(crate) enum TokenKind {
     Eof,
     Identifier,
-    NumericConstant,
+    IntegerConstant,
+    FloatConstant,
     Colon,
     ColonColon,
     ColonEqual,
@@ -169,7 +179,8 @@ impl fmt::Display for TokenKind {
         match self {
             TokenKind::Eof => write!(f, "end of file"),
             TokenKind::Identifier => write!(f, "identifier"),
-            TokenKind::NumericConstant => write!(f, "numeric constant"),
+            TokenKind::IntegerConstant => write!(f, "integer constant"),
+            TokenKind::FloatConstant => write!(f, "float constant"),
             TokenKind::Colon => write!(f, "`:`"),
             TokenKind::ColonColon => write!(f, "`::`"),
             TokenKind::ColonEqual => write!(f, "`:=`"),
