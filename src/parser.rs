@@ -150,6 +150,24 @@ impl<'ctx> Parser<'ctx> {
     fn parse_float_constant(&mut self, tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
         let lexeme = self.ctx.get_source_map().get_text_snippet(tok.span);
         let float = parse_float_constant(lexeme);
+
+        if let Some(exponent_loc) = float.exponent_missing_digits_loc {
+            let suffix_len = float.suffix.map_or(0, str::len);
+            let exponent_span = Span {
+                start: tok.span.start + exponent_loc,
+                end: tok.span.start + BytePos::from_usize(lexeme.len() - suffix_len),
+            };
+            let exponent_marker = self.ctx.get_source_map().get_text_snippet(exponent_span);
+
+            return Err(Diagnostic::builder(Diag::FloatExponentMissingDigits)
+                .label(
+                    exponent_span,
+                    format!("expected at least one digit after `{exponent_marker}`"),
+                )
+                .build()
+                .into());
+        }
+
         let suffix = match float.suffix {
             Some(suffix) => match get_type_name_from_str(suffix) {
                 Some(ty @ (Type::F32 | Type::F64)) => Some(ty),

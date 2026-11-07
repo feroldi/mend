@@ -1,3 +1,5 @@
+use crate::source_map::BytePos;
+
 #[derive(PartialEq, Eq, Debug)]
 pub(crate) struct IntegerConst<'a> {
     pub(crate) value: u64,
@@ -14,6 +16,7 @@ pub(crate) struct FloatConst<'a> {
     /// The integer part, fraction and exponent, without the suffix.
     digits: &'a str,
     pub(crate) suffix: Option<&'a str>,
+    pub(crate) exponent_missing_digits_loc: Option<BytePos>,
 }
 
 impl FloatConst<'_> {
@@ -79,9 +82,23 @@ pub(crate) fn parse_float_constant(token_lexeme: &str) -> FloatConst<'_> {
         cursor.bump_while(is_decimal_digit);
     }
 
+    let mut exponent_missing_digits_loc = None;
+
+    let exponent_start = cursor.pos;
+
     if cursor.try_bump(|ch| matches!(ch, b'e' | b'E')) {
         cursor.try_bump(|ch| matches!(ch, b'+' | b'-'));
+
+        let exponent_digits_start = cursor.pos;
         cursor.bump_while(is_decimal_digit);
+
+        if cursor
+            .slice_from(exponent_digits_start)
+            .bytes()
+            .all(|ch| ch == b'_')
+        {
+            exponent_missing_digits_loc = Some(BytePos::from_usize(exponent_start));
+        }
     }
 
     let digits = cursor.slice_from(0);
@@ -90,6 +107,7 @@ pub(crate) fn parse_float_constant(token_lexeme: &str) -> FloatConst<'_> {
     FloatConst {
         digits,
         suffix: (!suffix.is_empty()).then_some(suffix),
+        exponent_missing_digits_loc,
     }
 }
 

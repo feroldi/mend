@@ -75,6 +75,7 @@ pub(crate) enum Diag {
     InvalidFloatSuffix {
         suffix: Symbol,
     },
+    FloatExponentMissingDigits,
 }
 
 impl Diag {
@@ -92,6 +93,7 @@ impl Diag {
             Diag::InvalidDigit { .. } => "E0010",
             Diag::IntegerMissingDigits { .. } => "E0011",
             Diag::InvalidFloatSuffix { .. } => "E0012",
+            Diag::FloatExponentMissingDigits => "E0013",
         }
     }
 
@@ -129,6 +131,7 @@ impl Diag {
                 "invalid suffix `{}` for float literal",
                 ctx.resolve_symbol(*suffix)
             ),
+            Diag::FloatExponentMissingDigits => "float literal is missing exponent digits".into(),
         }
     }
 }

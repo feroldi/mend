@@ -485,3 +485,25 @@ fn test_float_with_integer_suffix() {
         |"#,
     );
 }
+
+#[test]
+fn test_float_exponent_missing_digits() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 1e;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0013]: float literal is missing exponent digits
+        | --> <source>:2:11
+        |  |
+        |2 |     x := 1e;
+        |  |           ^ expected at least one digit after `e`
+        |"#,
+    );
+}

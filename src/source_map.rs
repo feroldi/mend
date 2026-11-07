@@ -58,7 +58,7 @@ pub(crate) struct Span {
     pub(crate) end: BytePos,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct BytePos(usize);
 
 impl BytePos {
