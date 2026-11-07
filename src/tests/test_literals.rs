@@ -529,3 +529,25 @@ fn test_float_signed_exponent_missing_digits() {
         |"#,
     );
 }
+
+#[test]
+fn test_float_suffixed_exponent_missing_digits() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 1ef32;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0013]: float literal is missing exponent digits
+        | --> <source>:2:11
+        |  |
+        |2 |     x := 1ef32;
+        |  |           ^ expected at least one digit after `e`
+        |"#,
+    );
+}
