@@ -9,12 +9,17 @@ patching binary files of any format:
 |-------------------------------|----------------------------------------------------------|
 | `docs/rfc-mend-language.md`   | the language (cited as *Mend §N*)                         |
 | `docs/rfc-mend-bytecode.md`   | Mend Bytecode (MBC), the instruction set (companion RFC) |
-| `docs/rfc-interpreter.md`     | outline of the implementation: driver, lexer, parser, codegen, VM |
-| `docs/implementation-plan.md` | How everything should be implemented. |
+| `docs/rfc-interpreter.md`     | outline of the implementation: driver, scanner, parser, codegen, VM |
+| `docs/implementation-plan.md` | the implementation order, the test helpers and the development loop |
 
-The Rust crate `mend` (`Cargo.toml`, `src/`) implements them. This file
-collects what was learned while writing the RFCs, so later RFCs and the
-implementation stay consistent with them.
+The Rust crate `mend` (`Cargo.toml`, `src/`) implements them. It is a binary
+crate, with no `lib.rs`, because it becomes the `mend` CLI; the compiler lives
+in its modules, and `driver::compile` is its entry point. Only the compiler is
+in progress; the VM and the CLI are not planned yet. Implementation
+work follows the development loop in `docs/implementation-plan.md` step by
+step, with the functionality checklist there as the progress record. This file
+collects what was learned while writing the RFCs and the compiler, so both stay
+consistent with them.
 
 ## 0. Writing style (mandatory)
 
@@ -31,7 +36,8 @@ implementation stay consistent with them.
 - Prefer a table or a list over prose whenever the content is a set of
   parallel items.
 - **Don't write comments in code**. LLM comments are more confusing than
-  helpful, so do not write any comments at all whatsoever.
+  helpful, so do not write any comments at all whatsoever. The author writes
+  all comments. Keep the existing ones; don't remove or reword them.
 
 ## 1. How the author works
 
@@ -46,6 +52,16 @@ implementation stay consistent with them.
   handling of loops and conditions, and the tests. The tests show the real
   syntax, which can differ from the EBNF (sophia's grammar file says
   `for expr { }`, but the parser and tests use `for i : 0..10 { }`).
+- **Code in the author's style.** github.com/feroldi/cci is the author's own
+  C11 compiler, written in C++, and shows how they write code. Use it as the
+  model for the compiler's naming, decomposition (scanner, literal parser,
+  diagnostics, source map, sema) and test style, adapted to idiomatic Rust.
+  github.com/feroldi/atlas is its rewrite in Rust (a C17 compiler) and the
+  closest model for Rust code: `char_stream.rs`, `constant_parser.rs`,
+  `scanner.rs` (comments, char constants). Tests still follow
+  `docs/implementation-plan.md` (one `test_<functionality>.rs` per
+  functionality), not atlas's per-module test files. sophia stays the
+  reference for the scanner, parser and AST architecture.
 - **The prompt is the requirements list.** Each feature the author lists
   ("endianness", "assertions", "lambdas", "explicit mutable bindings", …) must
   map to a clearly findable section. Summarise that mapping in the final reply.
@@ -59,7 +75,7 @@ implementation stay consistent with them.
   support); formats are described in Mend code. A program is trusted like a
   shell script, so there is no security model or sandbox. Say so once, in
   Motivation or Non-goals.
-- Output is a Markdown file in `docs/`, written locally. Don't publish
+- An RFC is a Markdown file in `docs/`, written locally. Don't publish
   it as an artifact or a doc unless asked.
 
 ## 2. RFC skeleton
@@ -170,7 +186,7 @@ Reuse these in follow-up language RFCs unless the brief says otherwise.
   fields by bare name. A struct is not a type and has no instances; `Name`
   alone is not an expression.
 - **Enums:** `Name :: enum T { VARIANT = value, … }`, with `T` an integer
-  type and every value explicit (implicit numbering is E0607). A variant is
+  type and every value explicit (implicit numbering is an error). A variant is
   the constant `Name.VARIANT` of type `T`, never `Name::VARIANT`, and is
   never imported on its own. An enum is not a type; validate content values
   with `Name.contains(v)` and name them with `Name.name_of(v) -> Opt[str]`.
@@ -221,10 +237,12 @@ Reuse these in follow-up language RFCs unless the brief says otherwise.
   - fixed 64-bit instruction words with 16-bit operands; checked opcodes by
     default; a structural verifier; `.mbc` as the serialized form;
   - closures capture by value via `mkclos`; known callees use `call`.
-- **Open requests from bytecode §19.3** to the language RFC: diagnostic
-  range E07xx for backend and const-eval errors, and running const-eval on
+- **Open requests from bytecode §19.3** to the language RFC: a diagnostic
+  code range for backend and const-eval errors, and running const-eval on
   lowered code (Mend §18.2 still says Typed Core).
-- Ignore the diagnostic codes presented in the RFCs, they are not final.
+- Ignore the diagnostic codes presented in the RFCs, they are not final. The
+  compiler numbers codes in the order it implements them (`E0001`, `E0002`, …,
+  in `src/diagnostics.rs`).
 
 ## 5. Self-review checklist before finishing an RFC
 

@@ -269,7 +269,7 @@ enums, `batch`. Bindings are statements, not expressions.
 | Literal          | Examples                                   | Type                       |
 |------------------|--------------------------------------------|----------------------------|
 | Integer          | `42`, `0x7F`, `0b1010`, `0o17`, `1_000`     | inferred; defaults to `i32` |
-| Suffixed integer | `42u8`, `0xFFu8`, `-1i64`, `16usize`        | the suffix type            |
+| Suffixed integer | `42u8`, `0xFFu8`, `1i64`, `16usize`         | the suffix type            |
 | Float            | `1.5`, `2.0e-3`, `1e3`, `1f32`              | inferred; defaults to `f64` |
 | Bool / char      | `true`, `'a'`, `'\u{1F600}'`                | `bool` / `char`            |
 | Byte char        | `b'a'`                                      | `u8`                       |
@@ -288,8 +288,6 @@ Lexical rules:
 - Literals with a `0x`, `0b` or `0o` prefix are always integers; in `0x1f32`,
   `f32` is hex digits.
 - An integer suffix starts with `u` or `i`, which are not hex digits.
-- A `-` written directly before an integer literal folds into it, so
-  `-128i8` is valid.
 - Escapes: `\n \r \t \\ \0 \' \"`, `\xHH`, `\u{…}` (except in byte
   strings), and `\{ \}` (format strings only).
 - Only format strings `f"…"` interpolate, with `{expr}` and `{expr:spec}`. The

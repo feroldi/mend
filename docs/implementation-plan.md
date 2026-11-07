@@ -7,7 +7,7 @@ There are 3 RFCs at `docs/`:
 - `rfc-interpreter.md`: The CLI program that drives the Mend compiler and runs the Mend bytecode.
 
 The compiler is the first to be implemented.
-It should be a library that exposes Mend's AST, and a function to compile a string or a file into the Mend bytecode.
+It lives in the `mend` binary crate, which later becomes the CLI program; its modules expose Mend's AST, and a function to compile a string or a file into the Mend bytecode.
 Both `rfc-mend-language.md` and `rfc-mend-bytecode.md` will guide the implementation of the compiler.
 
 The interpreter will be implemented after the compiler.
