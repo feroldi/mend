@@ -462,3 +462,26 @@ fn test_annotated_float() {
         |"#,
     );
 }
+
+#[test]
+fn test_float_with_integer_suffix() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 1.5u8;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0012]: invalid suffix `u8` for float literal
+        | --> <source>:2:10
+        |  |
+        |2 |     x := 1.5u8;
+        |  |          ^^^^^ invalid suffix `u8`
+        |  = help: the suffix must be a float type, `f32` or `f64`
+        |"#,
+    );
+}

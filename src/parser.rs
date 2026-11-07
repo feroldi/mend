@@ -150,7 +150,23 @@ impl<'ctx> Parser<'ctx> {
     fn parse_float_constant(&mut self, tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
         let lexeme = self.ctx.get_source_map().get_text_snippet(tok.span);
         let float = parse_float_constant(lexeme);
-        let suffix = float.suffix.and_then(get_type_name_from_str);
+        let suffix = match float.suffix {
+            Some(suffix) => match get_type_name_from_str(suffix) {
+                Some(ty @ (Type::F32 | Type::F64)) => Some(ty),
+                _ => {
+                    let suffix_symbol = self.ctx.get_or_intern_str(suffix);
+
+                    return Err(Diagnostic::builder(Diag::InvalidFloatSuffix {
+                        suffix: suffix_symbol,
+                    })
+                    .label(tok.span, format!("invalid suffix `{suffix}`"))
+                    .help("the suffix must be a float type, `f32` or `f64`")
+                    .build()
+                    .into());
+                }
+            },
+            None => None,
+        };
 
         let value = match suffix {
             Some(Type::F32) => FloatValue::F32(float.to_f32()),

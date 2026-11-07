@@ -72,6 +72,9 @@ pub(crate) enum Diag {
     IntegerMissingDigits {
         radix: u32,
     },
+    InvalidFloatSuffix {
+        suffix: Symbol,
+    },
 }
 
 impl Diag {
@@ -88,6 +91,7 @@ impl Diag {
             Diag::IntegerLiteralOutOfRange { .. } => "E0009",
             Diag::InvalidDigit { .. } => "E0010",
             Diag::IntegerMissingDigits { .. } => "E0011",
+            Diag::InvalidFloatSuffix { .. } => "E0012",
         }
     }
 
@@ -121,6 +125,10 @@ impl Diag {
             Diag::IntegerMissingDigits { radix } => {
                 format!("{} literal is missing digits", radix_name(*radix))
             }
+            Diag::InvalidFloatSuffix { suffix } => format!(
+                "invalid suffix `{}` for float literal",
+                ctx.resolve_symbol(*suffix)
+            ),
         }
     }
 }
