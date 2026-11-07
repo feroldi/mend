@@ -30,6 +30,8 @@ implementation stay consistent with them.
   marketing language, no first person, no conversational asides.
 - Prefer a table or a list over prose whenever the content is a set of
   parallel items.
+- **Don't write comments in code**. LLM comments are more confusing than
+  helpful, so do not write any comments at all whatsoever.
 
 ## 1. How the author works
 
