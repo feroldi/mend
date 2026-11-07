@@ -264,19 +264,29 @@ fn check_integer_fits_type(literal: IntegerLiteral, ty: Type) -> Result<(), Diag
 }
 
 fn check_float_fits_type(literal: FloatLiteral) -> Result<(), DiagnosticBag> {
-    match literal.value {
-        FloatValue::F32(value) if value.is_infinite() => Err(DiagnosticBag::with_diag(
-            Diagnostic::builder(Diag::FloatLiteralOutOfRange { ty: Type::F32 })
-                .label(literal.span, format!("does not fit in `{}`", Type::F32))
-                .help(format!(
-                    "the largest finite `{}` is `{:e}`",
-                    Type::F32,
-                    f32::MAX
-                ))
-                .build(),
-        )),
-        _ => Ok(()),
+    let (ty, is_infinite) = match literal.value {
+        FloatValue::F32(value) => (Type::F32, value.is_infinite()),
+        FloatValue::F64(value) => (Type::F64, value.is_infinite()),
+    };
+
+    if !is_infinite {
+        return Ok(());
     }
+
+    let max_lit_formatted = if ty == Type::F32 {
+        format!("{:e}", f32::MAX)
+    } else {
+        format!("{:e}", f64::MAX)
+    };
+
+    Err(DiagnosticBag::with_diag(
+        Diagnostic::builder(Diag::FloatLiteralOutOfRange { ty })
+            .label(literal.span, format!("does not fit in `{ty}`"))
+            .help(format!(
+                "the largest finite `{ty}` is `{max_lit_formatted}`"
+            ))
+            .build(),
+    ))
 }
 
 fn binding_not_found(ident: Symbol, span: Span) -> DiagnosticBag {

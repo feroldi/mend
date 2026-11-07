@@ -574,3 +574,26 @@ fn test_suffixed_float_out_of_range() {
         |"#,
     );
 }
+
+#[test]
+fn test_default_float_out_of_range() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 1e309;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0014]: float literal out of range for `f64`
+        | --> <source>:2:10
+        |  |
+        |2 |     x := 1e309;
+        |  |          ^^^^^ does not fit in `f64`
+        |  = help: the largest finite `f64` is `1.7976931348623157e308`
+        |"#,
+    );
+}
