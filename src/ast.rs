@@ -23,7 +23,7 @@ pub(crate) struct Expr<'ctx> {
 
 #[derive(Clone, Copy)]
 pub(crate) enum ExprKind<'ctx> {
-    Const(Const),
+    Literal(Literal),
     BindRef(BindRef),
     BindDef(BindDef<'ctx>),
     Assign(AssignExpr<'ctx>),
@@ -34,16 +34,22 @@ pub(crate) enum ExprKind<'ctx> {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) enum Const {
-    Integer {
-        value: u64,
-        has_overflowed: bool,
-        span: Span,
-    },
-    Float {
-        value: FloatValue,
-        span: Span,
-    },
+pub(crate) enum Literal {
+    Integer(IntegerLiteral),
+    Float(FloatLiteral),
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct IntegerLiteral {
+    pub(crate) value: u64,
+    pub(crate) has_overflowed: bool,
+    pub(crate) span: Span,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct FloatLiteral {
+    pub(crate) value: FloatValue,
+    pub(crate) span: Span,
 }
 
 #[derive(Clone, Copy)]

@@ -551,3 +551,26 @@ fn test_float_suffixed_exponent_missing_digits() {
         |"#,
     );
 }
+
+#[test]
+fn test_suffixed_float_out_of_range() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 1e39f32;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0014]: float literal out of range for `f32`
+        | --> <source>:2:10
+        |  |
+        |2 |     x := 1e39f32;
+        |  |          ^^^^^^^ does not fit in `f32`
+        |  = help: the largest finite `f32` is `3.4028235e38`
+        |"#,
+    );
+}

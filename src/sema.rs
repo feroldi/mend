@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    AssignExpr, BindDef, BindRef, CompoundExpr, Const, Expr, ExprKind, FloatValue, Function,
-    Program, Type,
+    AssignExpr, BindDef, BindRef, CompoundExpr, Expr, ExprKind, FloatLiteral, FloatValue, Function,
+    IntegerLiteral, Literal, Program, Type,
 };
 use crate::compiler_context::CompilerContext;
-use crate::constant_parser::parse_float_constant;
 use crate::diagnostics::{Diag, Diagnostic, DiagnosticBag};
 use crate::interner::Symbol;
+use crate::literal_parser::parse_float;
 use crate::source_map::Span;
 
 pub(crate) struct Sema<'ctx> {
@@ -48,36 +48,32 @@ impl<'ctx> Sema<'ctx> {
             .find_map(|scope| scope.get(&identifier).copied())
     }
 
-    pub(crate) fn act_on_integer_constant(
+    pub(crate) fn act_on_integer_literal(
         &mut self,
-        value: u64,
-        has_overflowed: bool,
+        literal: IntegerLiteral,
         suffix: Option<Type>,
-        span: Span,
     ) -> Result<Expr<'ctx>, DiagnosticBag> {
         if let Some(ty) = suffix {
-            check_integer_fits_type(value, has_overflowed, ty, span)?;
+            check_integer_fits_type(literal, ty)?;
         }
 
         Ok(Expr {
-            kind: ExprKind::Const(Const::Integer {
-                value,
-                has_overflowed,
-                span,
-            }),
+            kind: ExprKind::Literal(Literal::Integer(literal)),
             ty: suffix.unwrap_or(Type::IntLiteral),
         })
     }
 
-    pub(crate) fn act_on_float_constant(
+    pub(crate) fn act_on_float_literal(
         &mut self,
-        constant: Const,
+        literal: FloatLiteral,
         suffix: Option<Type>,
-    ) -> Expr<'ctx> {
-        Expr {
-            kind: ExprKind::Const(constant),
+    ) -> Result<Expr<'ctx>, DiagnosticBag> {
+        check_float_fits_type(literal)?;
+
+        Ok(Expr {
+            kind: ExprKind::Literal(Literal::Float(literal)),
             ty: suffix.unwrap_or(Type::FloatLiteral),
-        }
+        })
     }
 
     pub(crate) fn act_on_bind_def(
@@ -185,7 +181,7 @@ impl<'ctx> Sema<'ctx> {
         expected_ty: Option<Type>,
     ) -> Result<Expr<'ctx>, DiagnosticBag> {
         if expr.ty == Type::FloatLiteral {
-            let ExprKind::Const(Const::Float { span, .. }) = expr.kind else {
+            let ExprKind::Literal(Literal::Float(FloatLiteral { span, .. })) = expr.kind else {
                 unreachable!("only float literals have type {}", Type::FloatLiteral);
             };
 
@@ -194,10 +190,10 @@ impl<'ctx> Sema<'ctx> {
                     let lexeme = self.ctx.get_source_map().get_text_snippet(span);
 
                     Expr {
-                        kind: ExprKind::Const(Const::Float {
-                            value: FloatValue::F32(parse_float_constant(lexeme).to_f32()),
+                        kind: ExprKind::Literal(Literal::Float(FloatLiteral {
+                            value: FloatValue::F32(parse_float(lexeme).to_f32()),
                             span,
-                        }),
+                        })),
                         ty: Type::F32,
                     }
                 }
@@ -212,18 +208,13 @@ impl<'ctx> Sema<'ctx> {
             return Ok(expr);
         }
 
-        let ExprKind::Const(Const::Integer {
-            value,
-            has_overflowed,
-            span,
-        }) = expr.kind
-        else {
+        let ExprKind::Literal(Literal::Integer(literal)) = expr.kind else {
             unreachable!("only integer literals have type {}", Type::IntLiteral);
         };
 
         let ty = expected_ty.unwrap_or(Type::I32);
 
-        check_integer_fits_type(value, has_overflowed, ty, span)?;
+        check_integer_fits_type(literal, ty)?;
 
         Ok(Expr { ty, ..expr })
     }
@@ -257,24 +248,35 @@ impl<'ctx> Sema<'ctx> {
     }
 }
 
-fn check_integer_fits_type(
-    value: u64,
-    has_overflowed: bool,
-    ty: Type,
-    span: Span,
-) -> Result<(), DiagnosticBag> {
+fn check_integer_fits_type(literal: IntegerLiteral, ty: Type) -> Result<(), DiagnosticBag> {
     let (min, max) = ty.integer_bounds();
 
-    if !has_overflowed && value <= max {
+    if !literal.has_overflowed && literal.value <= max {
         return Ok(());
     }
 
     Err(DiagnosticBag::with_diag(
         Diagnostic::builder(Diag::IntegerLiteralOutOfRange { ty })
-            .label(span, format!("does not fit in `{ty}`"))
+            .label(literal.span, format!("does not fit in `{ty}`"))
             .help(format!("the range of `{ty}` is `{min}..={max}`"))
             .build(),
     ))
+}
+
+fn check_float_fits_type(literal: FloatLiteral) -> Result<(), DiagnosticBag> {
+    match literal.value {
+        FloatValue::F32(value) if value.is_infinite() => Err(DiagnosticBag::with_diag(
+            Diagnostic::builder(Diag::FloatLiteralOutOfRange { ty: Type::F32 })
+                .label(literal.span, format!("does not fit in `{}`", Type::F32))
+                .help(format!(
+                    "the largest finite `{}` is `{:e}`",
+                    Type::F32,
+                    f32::MAX
+                ))
+                .build(),
+        )),
+        _ => Ok(()),
+    }
 }
 
 fn binding_not_found(ident: Symbol, span: Span) -> DiagnosticBag {

@@ -1,7 +1,7 @@
 use crate::source_map::BytePos;
 
 #[derive(PartialEq, Eq, Debug)]
-pub(crate) struct IntegerConst<'a> {
+pub(crate) struct ParsedIntegerLit<'a> {
     pub(crate) value: u64,
     pub(crate) has_overflowed: bool,
     pub(crate) suffix: Option<&'a str>,
@@ -12,14 +12,14 @@ pub(crate) struct IntegerConst<'a> {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub(crate) struct FloatConst<'a> {
+pub(crate) struct ParsedFloatLit<'a> {
     /// The integer part, fraction and exponent, without the suffix.
     digits: &'a str,
     pub(crate) suffix: Option<&'a str>,
     pub(crate) exponent_missing_digits_loc: Option<BytePos>,
 }
 
-impl FloatConst<'_> {
+impl ParsedFloatLit<'_> {
     pub(crate) fn to_f32(&self) -> f32 {
         self.digits.replace('_', "").parse().unwrap()
     }
@@ -29,7 +29,7 @@ impl FloatConst<'_> {
     }
 }
 
-pub(crate) fn parse_integer_constant(token_lexeme: &str) -> IntegerConst<'_> {
+pub(crate) fn parse_integer(token_lexeme: &str) -> ParsedIntegerLit<'_> {
     let mut cursor = Cursor::new(token_lexeme);
 
     let radix = match (cursor.peek(), cursor.lookahead(1)) {
@@ -61,9 +61,9 @@ pub(crate) fn parse_integer_constant(token_lexeme: &str) -> IntegerConst<'_> {
         .position(|ch| ch != b'_' && !(ch as char).is_digit(radix))
         .map(|index| digits_start + index);
 
-    let (value, has_overflowed) = eval_integer_constant(digits, radix);
+    let (value, has_overflowed) = eval_integer_literal(digits, radix);
 
-    IntegerConst {
+    ParsedIntegerLit {
         value,
         has_overflowed,
         suffix: (!suffix.is_empty()).then_some(suffix),
@@ -73,7 +73,7 @@ pub(crate) fn parse_integer_constant(token_lexeme: &str) -> IntegerConst<'_> {
     }
 }
 
-pub(crate) fn parse_float_constant(token_lexeme: &str) -> FloatConst<'_> {
+pub(crate) fn parse_float(token_lexeme: &str) -> ParsedFloatLit<'_> {
     let mut cursor = Cursor::new(token_lexeme);
 
     cursor.bump_while(is_decimal_digit);
@@ -104,7 +104,7 @@ pub(crate) fn parse_float_constant(token_lexeme: &str) -> FloatConst<'_> {
     let digits = cursor.slice_from(0);
     let suffix = cursor.rest();
 
-    FloatConst {
+    ParsedFloatLit {
         digits,
         suffix: (!suffix.is_empty()).then_some(suffix),
         exponent_missing_digits_loc,
@@ -115,7 +115,7 @@ fn is_decimal_digit(ch: u8) -> bool {
     ch == b'_' || ch.is_ascii_digit()
 }
 
-fn eval_integer_constant(digits: &str, radix: u32) -> (u64, bool) {
+fn eval_integer_literal(digits: &str, radix: u32) -> (u64, bool) {
     let mut value = 0u64;
     let mut has_overflowed = false;
     let radix = radix as u64;

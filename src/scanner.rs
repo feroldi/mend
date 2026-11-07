@@ -43,7 +43,7 @@ impl<'ctx> Scanner<'ctx> {
             '{' => TokenKind::Open(Delim::Curly),
             '}' => TokenKind::Closed(Delim::Curly),
             'a'..='z' | 'A'..='Z' | '_' => self.scan_identifier(span_start),
-            ch @ '0'..='9' => self.scan_numeric_constant(ch),
+            ch @ '0'..='9' => self.scan_numeric_literal(ch),
             ch => {
                 let span = Span {
                     start: span_start,
@@ -90,28 +90,28 @@ impl<'ctx> Scanner<'ctx> {
         }
     }
 
-    fn scan_numeric_constant(&mut self, first_digit: char) -> TokenKind {
+    fn scan_numeric_literal(&mut self, first_digit: char) -> TokenKind {
         let is_decimal = !(first_digit == '0' && matches!(self.peek(), 'x' | 'b' | 'o'));
 
-        let mut is_float = self.bump_numeric_constant_chars(is_decimal, first_digit);
+        let mut is_float = self.bump_numeric_literal_chars(is_decimal, first_digit);
 
         // A `.` is part of the literal only if a digit follows it, so that `0..10` is a range.
         if self.peek() == '.' && self.char_stream.lookahead(1).is_ascii_digit() {
             let period_ch = self.bump();
             is_float |= is_decimal;
-            is_float |= self.bump_numeric_constant_chars(is_decimal, period_ch);
+            is_float |= self.bump_numeric_literal_chars(is_decimal, period_ch);
         }
 
         if is_float {
-            TokenKind::FloatConstant
+            TokenKind::FloatLiteral
         } else {
-            TokenKind::IntegerConstant
+            TokenKind::IntegerLiteral
         }
     }
 
     /// Returns whether the chars have an exponent or a float suffix, which make a decimal literal
     /// a float.
-    fn bump_numeric_constant_chars(&mut self, is_decimal: bool, mut prev_char: char) -> bool {
+    fn bump_numeric_literal_chars(&mut self, is_decimal: bool, mut prev_char: char) -> bool {
         let mut is_float = false;
 
         while matches!(self.peek(), 'a'..='z' | 'A'..='Z' | '_' | '0'..='9') {
@@ -150,8 +150,8 @@ pub(crate) struct Token {
 pub(crate) enum TokenKind {
     Eof,
     Identifier,
-    IntegerConstant,
-    FloatConstant,
+    IntegerLiteral,
+    FloatLiteral,
     Colon,
     ColonColon,
     ColonEqual,
@@ -179,8 +179,8 @@ impl fmt::Display for TokenKind {
         match self {
             TokenKind::Eof => write!(f, "end of file"),
             TokenKind::Identifier => write!(f, "identifier"),
-            TokenKind::IntegerConstant => write!(f, "integer constant"),
-            TokenKind::FloatConstant => write!(f, "float constant"),
+            TokenKind::IntegerLiteral => write!(f, "integer literal"),
+            TokenKind::FloatLiteral => write!(f, "float literal"),
             TokenKind::Colon => write!(f, "`:`"),
             TokenKind::ColonColon => write!(f, "`::`"),
             TokenKind::ColonEqual => write!(f, "`:=`"),

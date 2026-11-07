@@ -76,6 +76,9 @@ pub(crate) enum Diag {
         suffix: Symbol,
     },
     FloatExponentMissingDigits,
+    FloatLiteralOutOfRange {
+        ty: Type,
+    },
 }
 
 impl Diag {
@@ -94,6 +97,7 @@ impl Diag {
             Diag::IntegerMissingDigits { .. } => "E0011",
             Diag::InvalidFloatSuffix { .. } => "E0012",
             Diag::FloatExponentMissingDigits => "E0013",
+            Diag::FloatLiteralOutOfRange { .. } => "E0014",
         }
     }
 
@@ -132,6 +136,9 @@ impl Diag {
                 ctx.resolve_symbol(*suffix)
             ),
             Diag::FloatExponentMissingDigits => "float literal is missing exponent digits".into(),
+            Diag::FloatLiteralOutOfRange { ty } => {
+                format!("float literal out of range for `{ty}`")
+            }
         }
     }
 }

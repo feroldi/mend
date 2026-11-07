@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::ast::{
-    AssignExpr, BindDef, BindRef, CompoundExpr, Const, Decl, Expr, ExprKind, FloatValue, Function,
-    Program, Type,
+    AssignExpr, BindDef, BindRef, CompoundExpr, Decl, Expr, ExprKind, FloatLiteral, FloatValue,
+    Function, IntegerLiteral, Literal, Program, Type,
 };
 use crate::compiler_context::CompilerContext;
 use crate::interner::Symbol;
@@ -72,7 +72,7 @@ impl<'ctx> CodeGen<'ctx> {
             ExprKind::BindDef(bind_def) => self.gen_bind_def_expr(bind_def),
             ExprKind::Assign(assign_expr) => self.gen_assign_expr(assign_expr),
             ExprKind::Compound(compound_expr) => self.gen_compound_expr(compound_expr),
-            ExprKind::Const(_) | ExprKind::BindRef(_) | ExprKind::Function(_) => unimplemented!(),
+            ExprKind::Literal(_) | ExprKind::BindRef(_) | ExprKind::Function(_) => unimplemented!(),
         }
     }
 
@@ -80,20 +80,20 @@ impl<'ctx> CodeGen<'ctx> {
         let scalar_ty = scalar_type_of(expr.ty);
 
         match expr.kind {
-            ExprKind::Const(constant) => self.gen_constant_expr(constant, scalar_ty, dest),
+            ExprKind::Literal(literal) => self.gen_literal_expr(literal, scalar_ty, dest),
             ExprKind::BindRef(bind_ref) => self.gen_bind_ref_expr(bind_ref, dest),
             _ => unimplemented!(),
         }
     }
 
-    fn gen_constant_expr(&mut self, constant: Const, ty: ScalarType, dest: ScalarReg) {
-        match constant {
-            Const::Integer { value, .. } => self.emit(Inst::Ldi {
+    fn gen_literal_expr(&mut self, literal: Literal, ty: ScalarType, dest: ScalarReg) {
+        match literal {
+            Literal::Integer(IntegerLiteral { value, .. }) => self.emit(Inst::Ldi {
                 ty,
                 dest,
                 imm: value as i32,
             }),
-            Const::Float { value, .. } => {
+            Literal::Float(FloatLiteral { value, .. }) => {
                 let constant = match value {
                     FloatValue::F32(value) => ScalarConst::F32(value),
                     FloatValue::F64(value) => ScalarConst::F64(value),

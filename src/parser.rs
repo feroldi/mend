@@ -1,7 +1,7 @@
 use crate::ast::*;
 use crate::compiler_context::CompilerContext;
-use crate::constant_parser::{parse_float_constant, parse_integer_constant};
 use crate::diagnostics::{Diag, Diagnostic, DiagnosticBag};
+use crate::literal_parser::{parse_float, parse_integer};
 use crate::scanner::{Delim, Keyword, Scanner, Token, TokenKind};
 use crate::sema::Sema;
 use crate::source_map::{BytePos, Span};
@@ -60,8 +60,8 @@ impl<'ctx> Parser<'ctx> {
         let tok = self.consume_tok()?;
 
         match tok.kind {
-            TokenKind::IntegerConstant => self.parse_integer_constant(tok),
-            TokenKind::FloatConstant => self.parse_float_constant(tok),
+            TokenKind::IntegerLiteral => self.parse_integer_literal(tok),
+            TokenKind::FloatLiteral => self.parse_float_literal(tok),
             TokenKind::Identifier => self.parse_identifier_expr(tok),
             TokenKind::Keyword(Keyword::Mut) => self.parse_mut_bind_def_expr(),
             TokenKind::Keyword(Keyword::Return) => self.parse_return_expr(),
@@ -88,9 +88,9 @@ impl<'ctx> Parser<'ctx> {
         }
     }
 
-    fn parse_integer_constant(&mut self, tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
+    fn parse_integer_literal(&mut self, tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
         let lexeme = self.ctx.get_source_map().get_text_snippet(tok.span);
-        let integer = parse_integer_constant(lexeme);
+        let integer = parse_integer(lexeme);
 
         if integer.has_no_digits {
             // Decimals by definition don't have a base prefix, and so they can only exist if at
@@ -143,13 +143,19 @@ impl<'ctx> Parser<'ctx> {
             None => None,
         };
 
-        self.sema
-            .act_on_integer_constant(integer.value, integer.has_overflowed, suffix, tok.span)
+        self.sema.act_on_integer_literal(
+            IntegerLiteral {
+                value: integer.value,
+                has_overflowed: integer.has_overflowed,
+                span: tok.span,
+            },
+            suffix,
+        )
     }
 
-    fn parse_float_constant(&mut self, tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
+    fn parse_float_literal(&mut self, tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
         let lexeme = self.ctx.get_source_map().get_text_snippet(tok.span);
-        let float = parse_float_constant(lexeme);
+        let float = parse_float(lexeme);
 
         if let Some(exponent_loc) = float.exponent_missing_digits_loc {
             let suffix_len = float.suffix.map_or(0, str::len);
@@ -191,13 +197,13 @@ impl<'ctx> Parser<'ctx> {
             _ => FloatValue::F64(float.to_f64()),
         };
 
-        Ok(self.sema.act_on_float_constant(
-            Const::Float {
+        self.sema.act_on_float_literal(
+            FloatLiteral {
                 value,
                 span: tok.span,
             },
             suffix,
-        ))
+        )
     }
 
     fn parse_identifier_expr(&mut self, ident_tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
