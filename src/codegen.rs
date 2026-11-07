@@ -2,16 +2,17 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::ast::{
-    AssignExpr, BindDef, BindRef, CompoundExpr, Decl, Expr, ExprKind, FloatLiteral, FloatValue,
-    Function, IntegerLiteral, Literal, Program, Type,
+    AssignExpr, BindDef, BindRef, CompoundExpr, Decl, Expr, ExprKind, FloatLiteral, Function,
+    IntegerLiteral, Literal, Program, Type,
 };
+use crate::big_num::{BigFloat, BigInt};
 use crate::compiler_context::CompilerContext;
 use crate::interner::Symbol;
 
 pub(crate) struct CodeGen<'ctx> {
     ctx: &'ctx CompilerContext,
-    emitted_insts: Vec<Inst>,
-    scalar_consts: Vec<ScalarConst>,
+    emitted_insts: Vec<Inst<'ctx>>,
+    scalar_consts: Vec<ScalarConst<'ctx>>,
     scalar_frame_size: usize,
     scope_stack: Vec<HashMap<Symbol, Binding>>,
 }
@@ -27,7 +28,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    pub(crate) fn gen_program(&mut self, program: Program) -> MbcProgram<'ctx> {
+    pub(crate) fn gen_program(&mut self, program: Program<'ctx>) -> MbcProgram<'ctx> {
         let functions = program
             .decls
             .iter()
@@ -41,14 +42,14 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn gen_decl(&mut self, decl: &Decl) -> MbcFunction {
+    fn gen_decl(&mut self, decl: &Decl<'ctx>) -> MbcFunction<'ctx> {
         match decl.value.kind {
             ExprKind::Function(Function { body }) => self.gen_function(decl.identifier, body),
             _ => todo!("other top-level exprs"),
         }
     }
 
-    fn gen_function(&mut self, name: Symbol, body: CompoundExpr) -> MbcFunction {
+    fn gen_function(&mut self, name: Symbol, body: CompoundExpr<'ctx>) -> MbcFunction<'ctx> {
         self.scalar_frame_size = 0;
 
         self.gen_compound_expr(body);
@@ -65,7 +66,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn gen_expr(&mut self, expr: &Expr) {
+    fn gen_expr(&mut self, expr: &Expr<'ctx>) {
         match expr.kind {
             ExprKind::Semi(expr) => self.gen_expr(expr),
             ExprKind::Return => self.gen_return_expr(),
@@ -76,7 +77,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn gen_expr_to_reg(&mut self, expr: &Expr, dest: ScalarReg) {
+    fn gen_expr_to_reg(&mut self, expr: &Expr<'ctx>, dest: ScalarReg) {
         let scalar_ty = scalar_type_of(expr.ty);
 
         match expr.kind {
@@ -86,17 +87,17 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn gen_literal_expr(&mut self, literal: Literal, ty: ScalarType, dest: ScalarReg) {
+    fn gen_literal_expr(&mut self, literal: Literal<'ctx>, ty: ScalarType, dest: ScalarReg) {
         match literal {
             Literal::Integer(IntegerLiteral { value, .. }) => self.emit(Inst::Ldi {
                 ty,
                 dest,
-                imm: value as i32,
+                imm: value,
             }),
             Literal::Float(FloatLiteral { value, .. }) => {
-                let constant = match value {
-                    FloatValue::F32(value) => ScalarConst::F32(value),
-                    FloatValue::F64(value) => ScalarConst::F64(value),
+                let constant = match ty {
+                    ScalarType::F32 => ScalarConst::F32(value),
+                    _ => ScalarConst::F64(value),
                 };
                 let index = self.add_scalar_const(constant);
 
@@ -105,14 +106,14 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn add_scalar_const(&mut self, constant: ScalarConst) -> ScalarConstIndex {
+    fn add_scalar_const(&mut self, constant: ScalarConst<'ctx>) -> ScalarConstIndex {
         let index = ScalarConstIndex(self.scalar_consts.len());
         self.scalar_consts.push(constant);
 
         index
     }
 
-    fn gen_bind_def_expr(&mut self, bind_def: BindDef) {
+    fn gen_bind_def_expr(&mut self, bind_def: BindDef<'ctx>) {
         let dest = self.alloc_scalar_reg();
 
         self.gen_expr_to_reg(bind_def.value, dest);
@@ -127,7 +128,7 @@ impl<'ctx> CodeGen<'ctx> {
         self.emit(Inst::Mov { dest, source });
     }
 
-    fn gen_assign_expr(&mut self, assign_expr: AssignExpr) {
+    fn gen_assign_expr(&mut self, assign_expr: AssignExpr<'ctx>) {
         let binding = self.find_in_scope(assign_expr.identifier);
         let value_reg = self.alloc_scalar_reg();
 
@@ -139,7 +140,7 @@ impl<'ctx> CodeGen<'ctx> {
         });
     }
 
-    fn gen_compound_expr(&mut self, compound_expr: CompoundExpr) {
+    fn gen_compound_expr(&mut self, compound_expr: CompoundExpr<'ctx>) {
         self.enter_scope();
 
         for expr in compound_expr.exprs {
@@ -180,7 +181,7 @@ impl<'ctx> CodeGen<'ctx> {
         self.emit(Inst::Ret);
     }
 
-    fn emit(&mut self, inst: Inst) {
+    fn emit(&mut self, inst: Inst<'ctx>) {
         self.emitted_insts.push(inst);
     }
 }
@@ -210,29 +211,29 @@ struct Binding {
 
 pub(crate) struct MbcProgram<'ctx> {
     ctx: &'ctx CompilerContext,
-    scalar_consts: Vec<ScalarConst>,
-    functions: Vec<MbcFunction>,
+    scalar_consts: Vec<ScalarConst<'ctx>>,
+    functions: Vec<MbcFunction<'ctx>>,
 }
 
 #[derive(Clone, Copy)]
-enum ScalarConst {
-    F32(f32),
-    F64(f64),
+enum ScalarConst<'ctx> {
+    F32(BigFloat<'ctx>),
+    F64(BigFloat<'ctx>),
 }
 
-struct MbcFunction {
+struct MbcFunction<'ctx> {
     name: Symbol,
     scalar_frame_size: usize,
     handle_frame_size: usize,
-    insts: Vec<Inst>,
+    insts: Vec<Inst<'ctx>>,
 }
 
 #[derive(Clone, Copy)]
-enum Inst {
+enum Inst<'ctx> {
     Ldi {
         ty: ScalarType,
         dest: ScalarReg,
-        imm: i32,
+        imm: BigInt<'ctx>,
     },
     Ldk {
         ty: ScalarType,
@@ -292,7 +293,7 @@ impl fmt::Display for MbcProgram<'_> {
     }
 }
 
-impl fmt::Display for Inst {
+impl fmt::Display for Inst<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Inst::Ldi { ty, dest, imm } => {
@@ -317,11 +318,11 @@ impl fmt::Display for ScalarConstIndex {
     }
 }
 
-impl fmt::Display for ScalarConst {
+impl fmt::Display for ScalarConst<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ScalarConst::F32(value) => write!(f, "{value:?}f32"),
-            ScalarConst::F64(value) => write!(f, "{value:?}f64"),
+            ScalarConst::F32(value) => write!(f, "{value}f32"),
+            ScalarConst::F64(value) => write!(f, "{value}f64"),
         }
     }
 }

@@ -90,7 +90,7 @@ impl<'ctx> Parser<'ctx> {
 
     fn parse_integer_literal(&mut self, tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
         let lexeme = self.ctx.get_source_map().get_text_snippet(tok.span);
-        let integer = parse_integer(lexeme);
+        let integer = parse_integer(self.ctx.get_big_num_arena(), lexeme);
 
         if integer.has_no_digits {
             // Decimals by definition don't have a base prefix, and so they can only exist if at
@@ -146,7 +146,6 @@ impl<'ctx> Parser<'ctx> {
         self.sema.act_on_integer_literal(
             IntegerLiteral {
                 value: integer.value,
-                has_overflowed: integer.has_overflowed,
                 span: tok.span,
             },
             suffix,
@@ -155,7 +154,7 @@ impl<'ctx> Parser<'ctx> {
 
     fn parse_float_literal(&mut self, tok: Token) -> Result<Expr<'ctx>, DiagnosticBag> {
         let lexeme = self.ctx.get_source_map().get_text_snippet(tok.span);
-        let float = parse_float(lexeme);
+        let float = parse_float(self.ctx.get_big_num_arena(), lexeme);
 
         if let Some(exponent_loc) = float.exponent_missing_digits_loc {
             let suffix_len = float.suffix.map_or(0, str::len);
@@ -192,14 +191,9 @@ impl<'ctx> Parser<'ctx> {
             None => None,
         };
 
-        let value = match suffix {
-            Some(Type::F32) => FloatValue::F32(float.to_f32()),
-            _ => FloatValue::F64(float.to_f64()),
-        };
-
         self.sema.act_on_float_literal(
             FloatLiteral {
-                value,
+                value: float.value,
                 span: tok.span,
             },
             suffix,

@@ -1,4 +1,5 @@
 mod ast;
+mod big_num;
 mod char_stream;
 mod codegen;
 mod compiler_context;
