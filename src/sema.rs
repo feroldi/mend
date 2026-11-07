@@ -1,13 +1,15 @@
 use std::collections::HashMap;
 
+use bumpalo::Bump;
+
 use crate::ast::{
-    AssignExpr, BindDef, BindRef, CompoundExpr, Expr, ExprKind, FloatLiteral, FloatValue, Function,
+    AssignExpr, BindDef, BindRef, CompoundExpr, Expr, ExprKind, FloatLiteral, Function,
     IntegerLiteral, Literal, Program, Type,
 };
+use crate::big_num::BigInt;
 use crate::compiler_context::CompilerContext;
 use crate::diagnostics::{Diag, Diagnostic, DiagnosticBag};
 use crate::interner::Symbol;
-use crate::literal_parser::parse_float;
 use crate::source_map::Span;
 
 pub(crate) struct Sema<'ctx> {
@@ -50,11 +52,11 @@ impl<'ctx> Sema<'ctx> {
 
     pub(crate) fn act_on_integer_literal(
         &mut self,
-        literal: IntegerLiteral,
+        literal: IntegerLiteral<'ctx>,
         suffix: Option<Type>,
     ) -> Result<Expr<'ctx>, DiagnosticBag> {
         if let Some(ty) = suffix {
-            check_integer_fits_type(literal, ty)?;
+            check_integer_fits_type(self.ctx.get_big_num_arena(), literal, ty)?;
         }
 
         Ok(Expr {
@@ -65,10 +67,12 @@ impl<'ctx> Sema<'ctx> {
 
     pub(crate) fn act_on_float_literal(
         &mut self,
-        literal: FloatLiteral,
+        literal: FloatLiteral<'ctx>,
         suffix: Option<Type>,
     ) -> Result<Expr<'ctx>, DiagnosticBag> {
-        check_float_fits_type(literal)?;
+        if let Some(ty) = suffix {
+            check_float_fits_type(self.ctx.get_big_num_arena(), literal, ty)?;
+        }
 
         Ok(Expr {
             kind: ExprKind::Literal(Literal::Float(literal)),
@@ -181,30 +185,17 @@ impl<'ctx> Sema<'ctx> {
         expected_ty: Option<Type>,
     ) -> Result<Expr<'ctx>, DiagnosticBag> {
         if expr.ty == Type::FloatLiteral {
-            let ExprKind::Literal(Literal::Float(FloatLiteral { span, .. })) = expr.kind else {
+            let ExprKind::Literal(Literal::Float(literal)) = expr.kind else {
                 unreachable!("only float literals have type {}", Type::FloatLiteral);
             };
 
-            return Ok(match expected_ty {
-                Some(Type::F32) => {
-                    let lexeme = self.ctx.get_source_map().get_text_snippet(span);
-                    let literal = FloatLiteral {
-                        value: FloatValue::F32(parse_float(lexeme).to_f32()),
-                        span,
-                    };
+            let ty = expected_ty.unwrap_or(Type::F64);
 
-                    check_float_fits_type(literal)?;
+            if matches!(ty, Type::F32 | Type::F64) {
+                check_float_fits_type(self.ctx.get_big_num_arena(), literal, ty)?;
+            }
 
-                    Expr {
-                        kind: ExprKind::Literal(Literal::Float(literal)),
-                        ty: Type::F32,
-                    }
-                }
-                ty => Expr {
-                    ty: ty.unwrap_or(Type::F64),
-                    ..expr
-                },
-            });
+            return Ok(Expr { ty, ..expr });
         }
 
         if expr.ty != Type::IntLiteral {
@@ -217,7 +208,7 @@ impl<'ctx> Sema<'ctx> {
 
         let ty = expected_ty.unwrap_or(Type::I32);
 
-        check_integer_fits_type(literal, ty)?;
+        check_integer_fits_type(self.ctx.get_big_num_arena(), literal, ty)?;
 
         Ok(Expr { ty, ..expr })
     }
@@ -251,10 +242,14 @@ impl<'ctx> Sema<'ctx> {
     }
 }
 
-fn check_integer_fits_type(literal: IntegerLiteral, ty: Type) -> Result<(), DiagnosticBag> {
+fn check_integer_fits_type(
+    arena: &Bump,
+    literal: IntegerLiteral,
+    ty: Type,
+) -> Result<(), DiagnosticBag> {
     let (min, max) = ty.integer_bounds();
 
-    if !literal.has_overflowed && literal.value <= max {
+    if literal.value <= BigInt::new(arena, u64::BITS, max) {
         return Ok(());
     }
 
@@ -266,13 +261,21 @@ fn check_integer_fits_type(literal: IntegerLiteral, ty: Type) -> Result<(), Diag
     ))
 }
 
-fn check_float_fits_type(literal: FloatLiteral) -> Result<(), DiagnosticBag> {
-    let (ty, is_infinite) = match literal.value {
-        FloatValue::F32(value) => (Type::F32, value.is_infinite()),
-        FloatValue::F64(value) => (Type::F64, value.is_infinite()),
+fn check_float_fits_type(
+    arena: &Bump,
+    literal: FloatLiteral,
+    ty: Type,
+) -> Result<(), DiagnosticBag> {
+    let (precision, max_exponent) = match ty {
+        Type::F32 => (24, 128),
+        Type::F64 => (53, 1024),
+        _ => unreachable!("{ty} is not a float type"),
     };
 
-    if !is_infinite {
+    let overflow_threshold = BigInt::new(arena, max_exponent, (1u64 << (precision + 1)) - 1)
+        << (max_exponent - (precision + 1));
+
+    if literal.value < overflow_threshold {
         return Ok(());
     }
 

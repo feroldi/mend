@@ -1,5 +1,6 @@
 use std::fmt;
 
+use crate::big_num::{BigFloat, BigInt};
 use crate::interner::Symbol;
 use crate::source_map::Span;
 
@@ -23,7 +24,7 @@ pub(crate) struct Expr<'ctx> {
 
 #[derive(Clone, Copy)]
 pub(crate) enum ExprKind<'ctx> {
-    Literal(Literal),
+    Literal(Literal<'ctx>),
     BindRef(BindRef),
     BindDef(BindDef<'ctx>),
     Assign(AssignExpr<'ctx>),
@@ -34,28 +35,21 @@ pub(crate) enum ExprKind<'ctx> {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) enum Literal {
-    Integer(IntegerLiteral),
-    Float(FloatLiteral),
+pub(crate) enum Literal<'ctx> {
+    Integer(IntegerLiteral<'ctx>),
+    Float(FloatLiteral<'ctx>),
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct IntegerLiteral {
-    pub(crate) value: u64,
-    pub(crate) has_overflowed: bool,
+pub(crate) struct IntegerLiteral<'ctx> {
+    pub(crate) value: BigInt<'ctx>,
     pub(crate) span: Span,
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct FloatLiteral {
-    pub(crate) value: FloatValue,
+pub(crate) struct FloatLiteral<'ctx> {
+    pub(crate) value: BigFloat<'ctx>,
     pub(crate) span: Span,
-}
-
-#[derive(Clone, Copy)]
-pub(crate) enum FloatValue {
-    F32(f32),
-    F64(f64),
 }
 
 #[derive(Clone, Copy)]

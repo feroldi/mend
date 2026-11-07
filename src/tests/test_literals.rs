@@ -620,3 +620,95 @@ fn test_annotated_float_out_of_range() {
         |"#,
     );
 }
+
+#[test]
+fn test_float_just_below_f32_overflow() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 340282356779733661637539395458142568447f32;
+        |}
+        |"#,
+    );
+
+    check(
+        program,
+        r#"
+        |k0 = 3.40282356779733661637539395458142568447e38f32
+        |
+        |fn @main () frame s:1 h:0
+        |    ldk.f32 s0, k0
+        |    ret
+        |end
+        |"#,
+    );
+}
+
+#[test]
+fn test_float_at_f32_overflow() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 340282356779733661637539395458142568448f32;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0014]: float literal out of range for `f32`
+        | --> <source>:2:10
+        |  |
+        |2 |     x := 340282356779733661637539395458142568448f32;
+        |  |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ does not fit in `f32`
+        |  = help: the largest finite `f32` is `3.4028235e38`
+        |"#,
+    );
+}
+
+#[test]
+fn test_float_with_huge_exponent() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 1e999999999;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0014]: float literal out of range for `f64`
+        | --> <source>:2:10
+        |  |
+        |2 |     x := 1e999999999;
+        |  |          ^^^^^^^^^^^ does not fit in `f64`
+        |  = help: the largest finite `f64` is `1.7976931348623157e308`
+        |"#,
+    );
+}
+
+#[test]
+fn test_float_with_huge_negative_exponent() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x := 1e-999999999;
+        |}
+        |"#,
+    );
+
+    check(
+        program,
+        r#"
+        |k0 = 1e-999999999f64
+        |
+        |fn @main () frame s:1 h:0
+        |    ldk.f64 s0, k0
+        |    ret
+        |end
+        |"#,
+    );
+}

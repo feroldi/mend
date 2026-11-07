@@ -11,6 +11,7 @@ pub(crate) struct CompilerContext {
     string_interner: RefCell<StringInterner>,
     exprs: Bump,
     decls: Bump,
+    big_nums: Bump,
 }
 
 impl<'ctx> CompilerContext {
@@ -20,6 +21,7 @@ impl<'ctx> CompilerContext {
             string_interner: Default::default(),
             exprs: Default::default(),
             decls: Default::default(),
+            big_nums: Default::default(),
         }
     }
 
@@ -44,6 +46,10 @@ impl<'ctx> CompilerContext {
 
     pub(crate) fn alloc_expr(&'ctx self, expr: Expr<'ctx>) -> &'ctx Expr<'ctx> {
         self.exprs.alloc(expr)
+    }
+
+    pub(crate) fn get_big_num_arena(&'ctx self) -> &'ctx Bump {
+        &self.big_nums
     }
 
     pub(crate) fn alloc_slice_of_expr<'a>(

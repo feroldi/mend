@@ -1,9 +1,11 @@
+use bumpalo::Bump;
+
+use crate::big_num::{BigFloat, BigInt};
 use crate::source_map::BytePos;
 
 #[derive(PartialEq, Eq, Debug)]
 pub(crate) struct ParsedIntegerLit<'a> {
-    pub(crate) value: u64,
-    pub(crate) has_overflowed: bool,
+    pub(crate) value: BigInt<'a>,
     pub(crate) suffix: Option<&'a str>,
     pub(crate) radix: u32,
     pub(crate) has_no_digits: bool,
@@ -13,23 +15,12 @@ pub(crate) struct ParsedIntegerLit<'a> {
 
 #[derive(PartialEq, Eq, Debug)]
 pub(crate) struct ParsedFloatLit<'a> {
-    /// The integer part, fraction and exponent, without the suffix.
-    digits: &'a str,
+    pub(crate) value: BigFloat<'a>,
     pub(crate) suffix: Option<&'a str>,
     pub(crate) exponent_missing_digits_loc: Option<BytePos>,
 }
 
-impl ParsedFloatLit<'_> {
-    pub(crate) fn to_f32(&self) -> f32 {
-        self.digits.replace('_', "").parse().unwrap()
-    }
-
-    pub(crate) fn to_f64(&self) -> f64 {
-        self.digits.replace('_', "").parse().unwrap()
-    }
-}
-
-pub(crate) fn parse_integer(token_lexeme: &str) -> ParsedIntegerLit<'_> {
+pub(crate) fn parse_integer<'a>(arena: &'a Bump, token_lexeme: &'a str) -> ParsedIntegerLit<'a> {
     let mut cursor = Cursor::new(token_lexeme);
 
     let radix = match (cursor.peek(), cursor.lookahead(1)) {
@@ -61,11 +52,8 @@ pub(crate) fn parse_integer(token_lexeme: &str) -> ParsedIntegerLit<'_> {
         .position(|ch| ch != b'_' && !(ch as char).is_digit(radix))
         .map(|index| digits_start + index);
 
-    let (value, has_overflowed) = eval_integer_literal(digits, radix);
-
     ParsedIntegerLit {
-        value,
-        has_overflowed,
+        value: eval_digits(arena, &[digits], radix),
         suffix: (!suffix.is_empty()).then_some(suffix),
         radix,
         has_no_digits,
@@ -73,39 +61,59 @@ pub(crate) fn parse_integer(token_lexeme: &str) -> ParsedIntegerLit<'_> {
     }
 }
 
-pub(crate) fn parse_float(token_lexeme: &str) -> ParsedFloatLit<'_> {
+pub(crate) fn parse_float<'a>(arena: &'a Bump, token_lexeme: &'a str) -> ParsedFloatLit<'a> {
     let mut cursor = Cursor::new(token_lexeme);
 
+    let integer_digits_start = cursor.pos;
     cursor.bump_while(is_decimal_digit);
+    let integer_digits = cursor.slice_from(integer_digits_start);
+
+    let mut fraction_digits = "";
 
     if cursor.try_bump(|ch| ch == b'.') {
+        let fraction_digits_start = cursor.pos;
         cursor.bump_while(is_decimal_digit);
+        fraction_digits = cursor.slice_from(fraction_digits_start);
     }
 
+    let mantissa = eval_digits(arena, &[integer_digits, fraction_digits], 10);
+    let fraction_digit_count = count_digits(fraction_digits) as i64;
+
+    let mut explicit_exponent = 0i64;
     let mut exponent_missing_digits_loc = None;
 
     let exponent_start = cursor.pos;
 
     if cursor.try_bump(|ch| matches!(ch, b'e' | b'E')) {
+        let is_negative = cursor.peek() == Some(b'-');
         cursor.try_bump(|ch| matches!(ch, b'+' | b'-'));
 
         let exponent_digits_start = cursor.pos;
         cursor.bump_while(is_decimal_digit);
+        let exponent_digits = cursor.slice_from(exponent_digits_start);
 
-        if cursor
-            .slice_from(exponent_digits_start)
-            .bytes()
-            .all(|ch| ch == b'_')
-        {
+        if exponent_digits.bytes().all(|ch| ch == b'_') {
             exponent_missing_digits_loc = Some(BytePos::from_usize(exponent_start));
+        }
+
+        for digit in exponent_digits.bytes().filter(|&ch| ch != b'_') {
+            explicit_exponent = explicit_exponent
+                .saturating_mul(10)
+                .saturating_add(convert_digit_to_int(digit) as i64);
+        }
+
+        if is_negative {
+            explicit_exponent = -explicit_exponent;
         }
     }
 
-    let digits = cursor.slice_from(0);
     let suffix = cursor.rest();
 
     ParsedFloatLit {
-        digits,
+        value: BigFloat::new(
+            mantissa,
+            explicit_exponent.saturating_sub(fraction_digit_count),
+        ),
         suffix: (!suffix.is_empty()).then_some(suffix),
         exponent_missing_digits_loc,
     }
@@ -115,33 +123,32 @@ fn is_decimal_digit(ch: u8) -> bool {
     ch == b'_' || ch.is_ascii_digit()
 }
 
-fn eval_integer_literal(digits: &str, radix: u32) -> (u64, bool) {
-    let mut value = 0u64;
-    let mut has_overflowed = false;
-    let radix = radix as u64;
+fn eval_digits<'a>(arena: &'a Bump, digit_groups: &[&str], radix: u32) -> BigInt<'a> {
+    let bits_per_digit = u32::BITS - (radix - 1).leading_zeros();
+    let digit_count: usize = digit_groups.iter().map(|digits| count_digits(digits)).sum();
+    let bit_width = (digit_count as u32 * bits_per_digit).max(1);
 
-    for digit in digits.bytes() {
-        if digit == b'_' {
-            continue;
+    let mut value = BigInt::new(arena, bit_width, 0);
+
+    for digits in digit_groups {
+        for digit in digits.bytes().filter(|&ch| ch != b'_') {
+            value *= radix;
+            value += convert_digit_to_int(digit);
         }
-
-        let (low_mul, overflowed) = value.overflowing_mul(radix);
-        has_overflowed |= overflowed;
-        value = low_mul;
-
-        let (low_add, overflowed) = value.overflowing_add(convert_digit_to_int(digit));
-        has_overflowed |= overflowed;
-        value = low_add;
     }
 
-    (value, has_overflowed)
+    value
 }
 
-fn convert_digit_to_int(digit: u8) -> u64 {
+fn count_digits(digits: &str) -> usize {
+    digits.bytes().filter(|&ch| ch != b'_').count()
+}
+
+fn convert_digit_to_int(digit: u8) -> u32 {
     match digit {
-        b'0'..=b'9' => (digit - b'0') as u64,
-        b'a'..=b'f' => (digit - b'a') as u64 + 10,
-        b'A'..=b'F' => (digit - b'A') as u64 + 10,
+        b'0'..=b'9' => (digit - b'0') as u32,
+        b'a'..=b'f' => (digit - b'a') as u32 + 10,
+        b'A'..=b'F' => (digit - b'A') as u32 + 10,
         _ => unreachable!("should not convert '{}'", digit),
     }
 }
