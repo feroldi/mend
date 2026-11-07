@@ -188,12 +188,15 @@ impl<'ctx> Sema<'ctx> {
             return Ok(match expected_ty {
                 Some(Type::F32) => {
                     let lexeme = self.ctx.get_source_map().get_text_snippet(span);
+                    let literal = FloatLiteral {
+                        value: FloatValue::F32(parse_float(lexeme).to_f32()),
+                        span,
+                    };
+
+                    check_float_fits_type(literal)?;
 
                     Expr {
-                        kind: ExprKind::Literal(Literal::Float(FloatLiteral {
-                            value: FloatValue::F32(parse_float(lexeme).to_f32()),
-                            span,
-                        })),
+                        kind: ExprKind::Literal(Literal::Float(literal)),
                         ty: Type::F32,
                     }
                 }

@@ -597,3 +597,26 @@ fn test_default_float_out_of_range() {
         |"#,
     );
 }
+
+#[test]
+fn test_annotated_float_out_of_range() {
+    let program = compile(
+        r#"
+        |main :: () {
+        |    x: f32 = 1e39;
+        |}
+        |"#,
+    );
+
+    check_fail(
+        program,
+        r#"
+        |error[E0014]: float literal out of range for `f32`
+        | --> <source>:2:14
+        |  |
+        |2 |     x: f32 = 1e39;
+        |  |              ^^^^ does not fit in `f32`
+        |  = help: the largest finite `f32` is `3.4028235e38`
+        |"#,
+    );
+}
